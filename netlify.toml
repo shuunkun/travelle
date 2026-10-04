@@ -1,0 +1,10 @@
+# Netlify build settings for this Next.js app.
+# Netlify's Next.js adapter is applied automatically when it sees `next` in
+# package.json; these values ensure the build runs and publishes `.next`
+# even if the site's UI settings were saved before the app code was pushed.
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22"
