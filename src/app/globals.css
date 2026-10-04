@@ -1,26 +1,47 @@
 @import "tailwindcss";
 
+/* Tailwind v4 theme tokens: makes `text-primary`, `bg-primary/10`, etc. work. */
+@theme {
+  --color-primary: #7C9A82;
+  --color-primary-light: #E8F0EA;
+  --color-primary-dark: #5A7A60;
+  --color-sage: #7C9A82;
+  --color-sage-light: #E8F0EA;
+  --color-sage-dark: #5A7A60;
+  --color-beige: #D4C5A9;
+  --color-beige-light: #F5F0E8;
+  --color-rose: #C47C7C;
+  --color-rose-light: #F5E0E0;
+  --color-teal: #6BA3A0;
+  --color-teal-light: #E0F0EF;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-sage: #7C9A82;
+  --color-sage-light: #E8F0EA;
+  --color-sage-dark: #5A7A60;
+  --color-beige: #D4C5A9;
+  --color-beige-light: #F5F0E8;
+  --color-rose: #C47C7C;
+  --color-rose-light: #F5E0E0;
+  --color-teal: #6BA3A0;
+  --color-teal-light: #E0F0EF;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: system-ui, -apple-system, sans-serif;
+  color: #1a1a1a;
+  background: #fafafa;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
 }
