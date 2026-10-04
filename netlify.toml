@@ -8,3 +8,9 @@
 
 [build.environment]
   NODE_VERSION = "22"
+
+# The Next.js runtime turns the `.next` output into Netlify functions +
+# static assets. It is normally attached automatically at site creation,
+# but this site was created before the app code existed, so declare it here.
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
