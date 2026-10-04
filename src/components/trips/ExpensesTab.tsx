@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useMemo, useState } from 'react';
-import { Plus, Pencil, Trash2, Receipt, Filter } from 'lucide-react';
+import { Plus, Pencil, Trash2, Receipt, Filter, Plane, BedDouble, Link2 } from 'lucide-react';
 import { Expense, Friend, Trip } from '@/lib/types';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -23,6 +23,7 @@ import {
   pluralize,
 } from '@/lib/utils';
 import { getTripSpent } from '@/lib/selectors';
+import { listActivities } from '@/lib/activities';
 
 export interface ExpensesTabProps {
   trip: Trip;
@@ -30,17 +31,33 @@ export interface ExpensesTabProps {
   members: Friend[];
   /** Everyone referenced by the trip's data, for the person filter + names. */
   people: Friend[];
+  /** Jump to an activity in the itinerary (the page switches tabs and focuses it). */
+  onGoToActivity?: (activityId: string) => void;
 }
 
-const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, expenses, members, people }) => {
+type LinkFilter = 'all' | 'linked' | 'unlinked';
+
+const LINK_FILTERS: { value: LinkFilter; label: string }[] = [
+  { value: 'all', label: 'All expenses' },
+  { value: 'linked', label: 'Linked to activity' },
+  { value: 'unlinked', label: 'Unlinked' },
+];
+
+const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, expenses, members, people, onGoToActivity }) => {
   const { addExpense, updateExpense, deleteExpense } = useApp();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Expense | undefined>(undefined);
   const [pendingDelete, setPendingDelete] = useState<Expense | null>(null);
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [personFilter, setPersonFilter] = useState('all');
+  const [linkFilter, setLinkFilter] = useState<LinkFilter>('all');
 
   const personById = useMemo(() => new Map(people.map((p) => [p.id, p])), [people]);
+  const activityById = useMemo(
+    () => new Map(listActivities(trip).map((entry) => [entry.activity.id, entry.activity])),
+    [trip],
+  );
+  const hasAnyLinks = useMemo(() => expenses.some((e) => e.activityId), [expenses]);
 
   const sorted = useMemo(
     () => [...expenses].sort((a, b) => compareDateKeys(b.date, a.date) || b.id.localeCompare(a.id)),
@@ -55,14 +72,16 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, expenses, members, peop
           const involved = e.paidBy === personFilter || e.splitBetween.some((s) => s.friendId === personFilter);
           if (!involved) return false;
         }
+        if (linkFilter === 'linked' && !e.activityId) return false;
+        if (linkFilter === 'unlinked' && e.activityId) return false;
         return true;
       }),
-    [sorted, categoryFilter, personFilter],
+    [sorted, categoryFilter, personFilter, linkFilter],
   );
 
   const total = getTripSpent(expenses);
   const filteredTotal = getTripSpent(filtered);
-  const isFiltered = categoryFilter !== 'all' || personFilter !== 'all';
+  const isFiltered = categoryFilter !== 'all' || personFilter !== 'all' || linkFilter !== 'all';
   const budgetPct = trip.budget > 0 ? (total / trip.budget) * 100 : 0;
 
   const categoryTotals = useMemo(() => {
@@ -92,6 +111,25 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, expenses, members, peop
         {payer ? <Avatar name={payer.name} color={payer.color} size="xs" /> : null}
         <span className="text-sm text-gray-700 truncate">{payer?.name ?? 'Unknown'}</span>
       </div>
+    );
+  };
+
+  /** Small chip pointing at the itinerary activity this expense pays for. */
+  const renderActivityChip = (expense: Expense) => {
+    if (!expense.activityId) return null;
+    const activity = activityById.get(expense.activityId);
+    if (!activity) return null;
+    const Icon = activity.kind === 'flight' ? Plane : activity.kind === 'hotel' ? BedDouble : Link2;
+    return (
+      <button
+        type="button"
+        onClick={() => onGoToActivity?.(activity.id)}
+        className="mt-1 inline-flex max-w-full items-center gap-1 rounded-full bg-[#E8F0EA] px-2 py-0.5 text-[11px] font-medium text-[#5A7A60] hover:bg-[#d9e6dc] focus:outline-none focus:ring-2 focus:ring-[#7C9A82]"
+        title="Show in itinerary"
+      >
+        <Icon className="w-3 h-3 shrink-0" aria-hidden="true" />
+        <span className="truncate">{activity.title}</span>
+      </button>
     );
   };
 
@@ -177,6 +215,16 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, expenses, members, peop
               options={[{ value: 'all', label: 'Everyone' }, ...people.map((p) => ({ value: p.id, label: p.name }))]}
             />
           </div>
+          {(hasAnyLinks || linkFilter !== 'all') && (
+            <div className="w-44">
+              <Select
+                label="Activity link"
+                value={linkFilter}
+                onChange={(e) => setLinkFilter(e.target.value as LinkFilter)}
+                options={LINK_FILTERS}
+              />
+            </div>
+          )}
           {isFiltered && (
             <Button
               variant="ghost"
@@ -184,6 +232,7 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, expenses, members, peop
               onClick={() => {
                 setCategoryFilter('all');
                 setPersonFilter('all');
+                setLinkFilter('all');
               }}
             >
               Clear filters
@@ -217,7 +266,7 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, expenses, members, peop
         <EmptyState
           icon={<Filter className="w-6 h-6" aria-hidden="true" />}
           title="Nothing matches these filters"
-          description="Try a different category or person."
+          description="Try a different category, person or link filter."
         />
       ) : (
         <Card className="p-0 overflow-hidden">
@@ -250,6 +299,7 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, expenses, members, peop
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-gray-900 truncate">{expense.description}</p>
                         <p className="text-xs text-gray-400">{getCategoryLabel(expense.category)}</p>
+                        {renderActivityChip(expense)}
                       </div>
                     </div>
                   </td>
@@ -285,6 +335,7 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, expenses, members, peop
                       <p className="text-xs text-gray-400">
                         {formatDate(expense.date)} · {getCategoryLabel(expense.category)}
                       </p>
+                      {renderActivityChip(expense)}
                     </div>
                   </div>
                   <span className="text-sm font-semibold text-gray-900 tabular-nums">{formatCurrency(expense.amount, expense.currency)}</span>

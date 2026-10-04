@@ -20,6 +20,7 @@ type Action =
   | { type: 'ADD_TRIP'; trip: Trip }
   | { type: 'UPDATE_TRIP'; id: string; updater: (trip: Trip) => Trip }
   | { type: 'DELETE_TRIP'; id: string }
+  | { type: 'DELETE_ACTIVITY'; tripId: string; date: string; activityId: string }
   | { type: 'ADD_EXPENSE'; expense: Expense }
   | { type: 'UPDATE_EXPENSE'; id: string; patch: Partial<Omit<Expense, 'id'>> }
   | { type: 'DELETE_EXPENSE'; id: string }
@@ -45,6 +46,20 @@ function reducer(state: AppState, action: Action): AppState {
         trips: state.trips.filter((t) => t.id !== action.id),
         expenses: state.expenses.filter((e) => e.tripId !== action.id),
         settlements: state.settlements.filter((s) => s.tripId !== action.id),
+      };
+    case 'DELETE_ACTIVITY':
+      // Remove the activity but keep its expenses, just unlinked.
+      return {
+        ...state,
+        trips: state.trips.map((t) =>
+          t.id === action.tripId ? tripHelpers.removeActivity(t, action.date, action.activityId) : t,
+        ),
+        expenses: state.expenses.map((e) => {
+          if (e.activityId !== action.activityId) return e;
+          const rest = { ...e };
+          delete rest.activityId;
+          return rest;
+        }),
       };
     case 'ADD_EXPENSE':
       return { ...state, expenses: [...state.expenses, action.expense] };
@@ -104,6 +119,8 @@ export interface AppActions {
   addExpense: (input: Omit<Expense, 'id'>) => Expense;
   updateExpense: (id: string, patch: Partial<Omit<Expense, 'id'>>) => void;
   deleteExpense: (id: string) => void;
+  /** Link an expense to an itinerary activity, or pass `undefined` to unlink. */
+  linkExpenseToActivity: (expenseId: string, activityId: string | undefined) => void;
 
   addFriend: (input: Omit<Friend, 'id'>) => Friend;
   updateFriend: (id: string, patch: Partial<Omit<Friend, 'id'>>) => void;
@@ -183,7 +200,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateActivity: (tripId, date, activityId, patch) =>
         updateTripWith(tripId, (trip) => tripHelpers.updateActivity(trip, date, activityId, patch)),
       deleteActivity: (tripId, date, activityId) =>
-        updateTripWith(tripId, (trip) => tripHelpers.removeActivity(trip, date, activityId)),
+        dispatch({ type: 'DELETE_ACTIVITY', tripId, date, activityId }),
       moveActivity: (tripId, date, activityId, direction) =>
         updateTripWith(tripId, (trip) => tripHelpers.moveActivity(trip, date, activityId, direction)),
       moveActivityToDay: (tripId, fromDate, toDate, activityId) =>
@@ -207,6 +224,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       },
       updateExpense: (id, patch) => dispatch({ type: 'UPDATE_EXPENSE', id, patch }),
       deleteExpense: (id) => dispatch({ type: 'DELETE_EXPENSE', id }),
+      linkExpenseToActivity: (expenseId, activityId) =>
+        dispatch({ type: 'UPDATE_EXPENSE', id: expenseId, patch: { activityId } }),
 
       addFriend: (input) => {
         const friend: Friend = { ...input, id: generateId() };

@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useMemo, useState } from 'react';
+import { use, useCallback, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { MapPin, Calendar, Pencil, Trash2, ArrowLeft, Compass } from 'lucide-react';
@@ -37,6 +37,15 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
   const [deleteOpen, setDeleteOpen] = useState(false);
   // Captured once per mount; good enough for "today" badges.
   const [today] = useState(() => todayKey());
+  // Pending "show me this activity" request; ItineraryTab scrolls to it and
+  // highlights it until it reports back via onFocusHandled.
+  const [focusActivityId, setFocusActivityId] = useState<string | null>(null);
+
+  const goToActivity = useCallback((activityId: string) => {
+    setFocusActivityId(activityId);
+    setActiveTab('itinerary');
+  }, []);
+  const handleFocusHandled = useCallback(() => setFocusActivityId(null), []);
 
   const financials = useMemo(
     () => (trip ? getTripFinancials({ trips: app.trips, expenses, friends, settlements }, trip) : null),
@@ -148,9 +157,15 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
         <Tabs tabs={tabs} value={activeTab} onChange={setActiveTab} aria-label="Trip sections" className="mb-8" />
 
-        {activeTab === 'overview' && <OverviewTab trip={trip} members={members} financials={financials} onGoTo={setActiveTab} />}
-        {activeTab === 'itinerary' && <ItineraryTab trip={trip} today={today} />}
-        {activeTab === 'expenses' && <ExpensesTab trip={trip} expenses={financials.expenses} members={members} people={people} />}
+        {activeTab === 'overview' && (
+          <OverviewTab trip={trip} members={members} financials={financials} onGoTo={setActiveTab} onGoToActivity={goToActivity} />
+        )}
+        {activeTab === 'itinerary' && (
+          <ItineraryTab trip={trip} today={today} focusActivityId={focusActivityId} onFocusHandled={handleFocusHandled} />
+        )}
+        {activeTab === 'expenses' && (
+          <ExpensesTab trip={trip} expenses={financials.expenses} members={members} people={people} onGoToActivity={goToActivity} />
+        )}
         {activeTab === 'settle' && (
           <SettleTab
             trip={trip}

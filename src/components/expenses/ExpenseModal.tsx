@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Avatar } from '@/components/ui/Avatar';
 import { computeSplit, roundMoney, validateSplit } from '@/lib/split';
-import { EXPENSE_CATEGORIES, formatCurrency, isDateKey, todayKey } from '@/lib/utils';
+import { EXPENSE_CATEGORIES, formatCurrency, formatDate, isDateKey, todayKey } from '@/lib/utils';
+import { activityOptionLabel, listActivities } from '@/lib/activities';
 
 export interface ExpenseModalProps {
   isOpen: boolean;
@@ -18,6 +19,8 @@ export interface ExpenseModalProps {
   members: Friend[];
   /** When provided, the modal edits this expense instead of creating one. */
   expense?: Expense;
+  /** Prefilled values when creating (e.g. "Add cost" from an itinerary activity). Ignored when editing. */
+  defaults?: Partial<Pick<Expense, 'description' | 'amount' | 'date' | 'category' | 'activityId'>>;
   onSave: (input: Omit<Expense, 'id'>) => void;
 }
 
@@ -39,14 +42,14 @@ const ExpenseModal: React.FC<ExpenseModalProps> = (props) => {
       size="lg"
     >
       {/* Keyed so the form state resets whenever a different expense is opened. */}
-      <ExpenseForm key={expense?.id ?? 'new'} {...props} />
+      <ExpenseForm key={expense?.id ?? `new-${props.defaults?.activityId ?? ''}`} {...props} />
     </Modal>
   );
 };
 
 type FieldErrors = Partial<Record<'description' | 'amount' | 'date' | 'paidBy' | 'split', string>>;
 
-const ExpenseForm: React.FC<ExpenseModalProps> = ({ onClose, trip, members, expense, onSave }) => {
+const ExpenseForm: React.FC<ExpenseModalProps> = ({ onClose, trip, members, expense, defaults, onSave }) => {
   // People list: trip members plus anyone referenced by the expense being
   // edited (e.g. someone later removed from the trip) so edits never lose them.
   const people = useMemo(() => {
@@ -60,11 +63,28 @@ const ExpenseForm: React.FC<ExpenseModalProps> = ({ onClose, trip, members, expe
     return list;
   }, [members, expense]);
 
-  const [description, setDescription] = useState(expense?.description ?? '');
-  const [amount, setAmount] = useState(expense ? String(expense.amount) : '');
-  const [date, setDate] = useState(expense?.date ?? todayKey());
+  const seed = expense ? undefined : defaults;
+  const [description, setDescription] = useState(expense?.description ?? seed?.description ?? '');
+  const [amount, setAmount] = useState(
+    expense ? String(expense.amount) : seed?.amount !== undefined ? String(seed.amount) : '',
+  );
+  const [date, setDate] = useState(expense?.date ?? seed?.date ?? todayKey());
   const [paidBy, setPaidBy] = useState(expense?.paidBy ?? people[0]?.id ?? '');
-  const [category, setCategory] = useState<ExpenseCategory>(expense?.category ?? 'other');
+  const [category, setCategory] = useState<ExpenseCategory>(expense?.category ?? seed?.category ?? 'other');
+  const [activityId, setActivityId] = useState<string>(expense?.activityId ?? seed?.activityId ?? '');
+
+  // Activities this expense can be linked to, labelled by day.
+  const activityOptions = useMemo(() => {
+    const options = listActivities(trip).map((entry) => ({
+      value: entry.activity.id,
+      label: activityOptionLabel(entry, (d) => formatDate(d, { month: 'short', day: 'numeric' })),
+    }));
+    // Keep a stale link selectable so editing never silently drops it.
+    if (activityId && !options.some((o) => o.value === activityId)) {
+      options.push({ value: activityId, label: 'Linked activity (no longer in itinerary)' });
+    }
+    return [{ value: '', label: 'None' }, ...options];
+  }, [trip, activityId]);
   const [mode, setMode] = useState<SplitMode>(expense?.splitMode ?? 'equal');
   const [participants, setParticipants] = useState<string[]>(
     expense ? expense.splitBetween.map((s) => s.friendId) : people.map((p) => p.id),
@@ -163,6 +183,7 @@ const ExpenseForm: React.FC<ExpenseModalProps> = ({ onClose, trip, members, expe
       category,
       splitMode: mode,
       splitInputs,
+      activityId: activityId || undefined,
     });
     onClose();
   };
@@ -221,6 +242,14 @@ const ExpenseForm: React.FC<ExpenseModalProps> = ({ onClose, trip, members, expe
           options={EXPENSE_CATEGORIES}
         />
       </div>
+      {activityOptions.length > 1 && (
+        <Select
+          label="Linked activity (optional)"
+          value={activityId}
+          onChange={(e) => setActivityId(e.target.value)}
+          options={activityOptions}
+        />
+      )}
 
       <fieldset className="pt-4 border-t border-gray-100">
         <legend className="text-sm font-medium text-gray-700 mb-2">Split</legend>

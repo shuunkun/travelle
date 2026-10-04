@@ -2,6 +2,18 @@ import { AppData, Expense, Friend, Settlement, Trip } from './types';
 import { computeBalances, pairwiseBalance, simplifyDebts, Transfer, PersonBalance } from './settlements';
 import { fromCents, toCents } from './split';
 
+export {
+  expensesForActivity,
+  activityActualCost,
+  activityForExpense,
+  unlinkedExpenses,
+  getPlannedVsActual,
+  findActivity,
+  listActivities,
+  listBookings,
+} from './activities';
+export type { PlannedVsActual, LocatedActivity } from './activities';
+
 export const ME_ID = 'me';
 
 export function getTrip(data: AppData, tripId: string): Trip | undefined {

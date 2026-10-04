@@ -26,23 +26,64 @@ export const sampleTrips: Trip[] = [
       {
         date: '2025-04-10',
         activities: [
-          { id: 'a1', time: '10:00', title: 'Arrival at CDG', location: 'Charles de Gaulle Airport', notes: 'Take RER B to city center', category: 'transport' },
-          { id: 'a2', time: '14:00', title: 'Check-in to Airbnb', location: 'Le Marais', notes: 'Code: 1234', category: 'accommodation' },
-          { id: 'a3', time: '19:30', title: 'Welcome Dinner', location: 'Le Comptoir du Relais', notes: 'Reservation under Marco', category: 'food' }
+          {
+            id: 'a1',
+            kind: 'flight',
+            time: '07:20',
+            title: 'BA304 LHR → CDG',
+            location: '',
+            notes: 'Take RER B to city center after landing',
+            category: 'transport',
+            estimatedCost: 540,
+            details: {
+              type: 'flight',
+              airline: 'British Airways',
+              flightNumber: 'BA304',
+              departureAirport: 'LHR',
+              arrivalAirport: 'CDG',
+              departureDateTime: '2025-04-10T07:20',
+              arrivalDateTime: '2025-04-10T09:35',
+              bookingReference: 'X7K2PQ',
+              seat: '14A',
+              terminal: '5',
+            },
+          },
+          {
+            id: 'a2',
+            kind: 'hotel',
+            time: '15:00',
+            title: 'Stay at Hôtel du Marais',
+            location: '12 Rue des Archives, 75004 Paris',
+            notes: 'Door code: 1234',
+            category: 'accommodation',
+            estimatedCost: 1250,
+            details: {
+              type: 'hotel',
+              hotelName: 'Hôtel du Marais',
+              address: '12 Rue des Archives, 75004 Paris',
+              checkInDate: '2025-04-10',
+              checkOutDate: '2025-04-16',
+              checkInTime: '15:00',
+              checkOutTime: '11:00',
+              bookingReference: 'HM-88213',
+              roomType: 'Triple room',
+            },
+          },
+          { id: 'a3', kind: 'generic', time: '19:30', title: 'Welcome Dinner', location: 'Le Comptoir du Relais', notes: 'Reservation under Marco', category: 'food', estimatedCost: 120 }
         ]
       },
       {
         date: '2025-04-11',
         activities: [
-          { id: 'a4', time: '09:00', title: 'Louvre Museum', location: 'Louvre', notes: 'Tickets booked for 9am', category: 'activity' },
-          { id: 'a5', time: '13:00', title: 'Lunch at Cafe Marly', location: 'Next to Louvre', notes: 'Views of the pyramid', category: 'food' }
+          { id: 'a4', kind: 'generic', time: '09:00', title: 'Louvre Museum', location: 'Louvre', notes: 'Tickets booked for 9am', category: 'activity', estimatedCost: 60 },
+          { id: 'a5', kind: 'generic', time: '13:00', title: 'Lunch at Cafe Marly', location: 'Next to Louvre', notes: 'Views of the pyramid', category: 'food' }
         ]
       },
       {
         date: '2025-04-12',
         activities: [
-          { id: 'a6', time: '10:00', title: 'Eiffel Tower', location: 'Champ de Mars', notes: 'Taking the stairs', category: 'activity' },
-          { id: 'a7', time: '16:00', title: 'Seine River Cruise', location: 'Port de la Bourdonnais', notes: 'Sunset cruise', category: 'activity' }
+          { id: 'a6', kind: 'generic', time: '10:00', title: 'Eiffel Tower', location: 'Champ de Mars', notes: 'Taking the stairs', category: 'activity' },
+          { id: 'a7', kind: 'generic', time: '16:00', title: 'Seine River Cruise', location: 'Port de la Bourdonnais', notes: 'Sunset cruise', category: 'activity', estimatedCost: 90 }
         ]
       }
     ]
@@ -62,8 +103,8 @@ export const sampleTrips: Trip[] = [
       {
         date: '2024-10-02',
         activities: [
-          { id: 't1', time: '11:00', title: 'Tsukiji Outer Market', location: 'Tsukiji', notes: 'Lots of street food', category: 'food' },
-          { id: 't2', time: '15:00', title: 'teamLab Planets', location: 'Toyosu', notes: 'Wear shorts', category: 'activity' }
+          { id: 't1', kind: 'generic', time: '11:00', title: 'Tsukiji Outer Market', location: 'Tsukiji', notes: 'Lots of street food', category: 'food' },
+          { id: 't2', kind: 'generic', time: '15:00', title: 'teamLab Planets', location: 'Toyosu', notes: 'Wear shorts', category: 'activity', estimatedCost: 50 }
         ]
       }
     ]
@@ -83,7 +124,46 @@ export const sampleTrips: Trip[] = [
       {
         date: '2025-08-01',
         activities: [
-          { id: 'b1', time: '14:00', title: 'Villa Check-in', location: 'Ubud', notes: 'Private pool villa', category: 'accommodation' }
+          {
+            id: 'b0',
+            kind: 'flight',
+            time: '09:45',
+            title: 'JQ37 SYD → DPS',
+            location: '',
+            notes: 'Low-cost carrier — bring snacks',
+            category: 'transport',
+            estimatedCost: 1500,
+            details: {
+              type: 'flight',
+              airline: 'Jetstar',
+              flightNumber: 'JQ37',
+              departureAirport: 'SYD',
+              arrivalAirport: 'DPS',
+              departureDateTime: '2025-08-01T09:45',
+              arrivalDateTime: '2025-08-01T13:30',
+              bookingReference: 'JQ9L4D',
+            },
+          },
+          {
+            id: 'b1',
+            kind: 'hotel',
+            time: '14:00',
+            title: 'Stay at Ubud Pool Villa',
+            location: 'Jalan Raya Sanggingan, Ubud',
+            notes: 'Private pool villa',
+            category: 'accommodation',
+            estimatedCost: 900,
+            details: {
+              type: 'hotel',
+              hotelName: 'Ubud Pool Villa',
+              address: 'Jalan Raya Sanggingan, Ubud',
+              checkInDate: '2025-08-01',
+              checkOutDate: '2025-08-05',
+              checkInTime: '14:00',
+              checkOutTime: '12:00',
+              roomType: 'One-bedroom villa',
+            },
+          }
         ]
       }
     ]
@@ -94,12 +174,13 @@ export const sampleExpenses: Expense[] = [
   {
     id: 'e1',
     tripId: 'paris_2025',
-    description: 'Airbnb (6 nights)',
+    description: 'Hôtel du Marais (6 nights)',
     amount: 1200,
     currency: 'USD',
     paidBy: 'sarah',
     date: '2025-02-15',
     category: 'accommodation',
+    activityId: 'a2',
     splitBetween: [
       { friendId: 'me', amount: 400 },
       { friendId: 'sarah', amount: 400 },
@@ -115,6 +196,7 @@ export const sampleExpenses: Expense[] = [
     paidBy: 'me',
     date: '2025-03-01',
     category: 'activity',
+    activityId: 'a4',
     splitBetween: [
       { friendId: 'me', amount: 20 },
       { friendId: 'sarah', amount: 20 },
@@ -130,6 +212,7 @@ export const sampleExpenses: Expense[] = [
     paidBy: 'marco',
     date: '2025-04-10',
     category: 'food',
+    activityId: 'a3',
     splitBetween: [
       { friendId: 'me', amount: 50 },
       { friendId: 'sarah', amount: 50 },
@@ -173,6 +256,7 @@ export const sampleExpenses: Expense[] = [
     paidBy: 'me',
     date: '2025-01-10',
     category: 'transport',
+    activityId: 'b0',
     splitBetween: [
       { friendId: 'me', amount: 800 },
       { friendId: 'marco', amount: 800 }
@@ -191,6 +275,38 @@ export const sampleExpenses: Expense[] = [
       { friendId: 'me', amount: 21.67 },
       { friendId: 'sarah', amount: 21.67 },
       { friendId: 'marco', amount: 21.66 }
+    ]
+  },
+  {
+    id: 'e9',
+    tripId: 'paris_2025',
+    description: 'BA flights to Paris',
+    amount: 525,
+    currency: 'USD',
+    paidBy: 'me',
+    date: '2025-01-20',
+    category: 'transport',
+    activityId: 'a1',
+    splitBetween: [
+      { friendId: 'me', amount: 175 },
+      { friendId: 'sarah', amount: 175 },
+      { friendId: 'marco', amount: 175 }
+    ]
+  },
+  {
+    id: 'e10',
+    tripId: 'paris_2025',
+    description: 'Hotel city tax',
+    amount: 42,
+    currency: 'USD',
+    paidBy: 'marco',
+    date: '2025-04-16',
+    category: 'accommodation',
+    activityId: 'a2',
+    splitBetween: [
+      { friendId: 'me', amount: 14 },
+      { friendId: 'sarah', amount: 14 },
+      { friendId: 'marco', amount: 14 }
     ]
   },
   {

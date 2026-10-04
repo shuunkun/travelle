@@ -38,14 +38,64 @@ export interface ItineraryDay {
   activities: Activity[];
 }
 
+/**
+ * What sort of thing an activity is. `generic` is a plain itinerary entry;
+ * `flight` and `hotel` carry structured `details`. Extend this union (and
+ * `ActivityDetails`) to add more typed activities.
+ */
+export type ActivityKind = 'generic' | 'flight' | 'hotel';
+
+export interface FlightDetails {
+  type: 'flight';
+  airline: string;
+  flightNumber: string;
+  /** IATA code, upper-cased (e.g. "SYD"). */
+  departureAirport: string;
+  arrivalAirport: string;
+  /** Local date-time, "YYYY-MM-DDTHH:mm" (no timezone). */
+  departureDateTime: string;
+  arrivalDateTime: string;
+  bookingReference?: string;
+  seat?: string;
+  terminal?: string;
+  gate?: string;
+}
+
+export interface HotelDetails {
+  type: 'hotel';
+  hotelName: string;
+  address: string;
+  /** ISO date key (YYYY-MM-DD). */
+  checkInDate: string;
+  checkOutDate: string;
+  /** "HH:mm"; defaults to 15:00 when absent. */
+  checkInTime?: string;
+  /** "HH:mm"; defaults to 11:00 when absent. */
+  checkOutTime?: string;
+  bookingReference?: string;
+  roomType?: string;
+}
+
+export type ActivityDetails = FlightDetails | HotelDetails;
+
 export interface Activity {
   id: string;
+  /** "HH:mm" or "" — for flights/hotels this is derived from `details`. */
   time: string;
   title: string;
   location: string;
   notes: string;
+  /** Used for colouring and filters. Flights are `transport`, hotels `accommodation`. */
   category: ActivityCategory;
+  kind: ActivityKind;
+  /** Present (and matching `kind`) for flights and hotels; absent for generic activities. */
+  details?: ActivityDetails;
+  /** Planned cost, in the trip's currency. Compare against linked expenses. */
+  estimatedCost?: number;
 }
+
+export type FlightActivity = Activity & { kind: 'flight'; details: FlightDetails };
+export type HotelActivity = Activity & { kind: 'hotel'; details: HotelDetails };
 
 export interface Expense {
   id: string;
@@ -61,6 +111,8 @@ export interface Expense {
   splitMode?: SplitMode;
   /** Raw user inputs for percent/shares/exact modes, keyed by friend id. */
   splitInputs?: Record<string, number>;
+  /** Itinerary activity this expense pays for, if any. Many expenses may link to one activity. */
+  activityId?: string;
 }
 
 export interface SplitEntry {

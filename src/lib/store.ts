@@ -1,8 +1,20 @@
-import { Activity, AppData, Expense, Friend, Settlement, Trip } from './types';
+import {
+  Activity,
+  ActivityDetails,
+  ActivityKind,
+  AppData,
+  Expense,
+  FlightDetails,
+  Friend,
+  HotelDetails,
+  Settlement,
+  Trip,
+} from './types';
 import { sampleTrips, sampleExpenses, sampleFriends, sampleSettlements } from './sample-data';
 import { syncItineraryToRange } from './trip-helpers';
 import { ME_ID } from './selectors';
-import { PRESET_COLORS, generateId, todayKey } from './utils';
+import { PRESET_COLORS, generateId, isDateKey, todayKey } from './utils';
+import { activityDerivedTime, categoryForKind, isLocalDateTime, listActivities } from './activities';
 
 /**
  * Low-level localStorage persistence. This module is only ever called from
@@ -54,16 +66,68 @@ const asNumber = (v: unknown, fallback = 0): number =>
   typeof v === 'number' && Number.isFinite(v) ? v : fallback;
 const asArray = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 
+const asOptionalString = (v: unknown): string | undefined =>
+  typeof v === 'string' && v.trim() ? v : undefined;
+
+function normalizeDetails(kind: string, raw: unknown): ActivityDetails | undefined {
+  if (!isRecord(raw)) return undefined;
+  if (kind === 'flight') {
+    const details: FlightDetails = {
+      type: 'flight',
+      airline: asString(raw.airline),
+      flightNumber: asString(raw.flightNumber),
+      departureAirport: asString(raw.departureAirport).toUpperCase(),
+      arrivalAirport: asString(raw.arrivalAirport).toUpperCase(),
+      departureDateTime: asString(raw.departureDateTime),
+      arrivalDateTime: asString(raw.arrivalDateTime),
+      bookingReference: asOptionalString(raw.bookingReference),
+      seat: asOptionalString(raw.seat),
+      terminal: asOptionalString(raw.terminal),
+      gate: asOptionalString(raw.gate),
+    };
+    // Without a parsable departure the flight can't be placed on a day.
+    return isLocalDateTime(details.departureDateTime) ? details : undefined;
+  }
+  if (kind === 'hotel') {
+    const details: HotelDetails = {
+      type: 'hotel',
+      hotelName: asString(raw.hotelName),
+      address: asString(raw.address),
+      checkInDate: asString(raw.checkInDate),
+      checkOutDate: asString(raw.checkOutDate),
+      checkInTime: asOptionalString(raw.checkInTime),
+      checkOutTime: asOptionalString(raw.checkOutTime),
+      bookingReference: asOptionalString(raw.bookingReference),
+      roomType: asOptionalString(raw.roomType),
+    };
+    return isDateKey(details.checkInDate) && isDateKey(details.checkOutDate) ? details : undefined;
+  }
+  return undefined;
+}
+
 function normalizeActivity(raw: unknown): Activity | null {
   if (!isRecord(raw)) return null;
-  return {
+  // Legacy records (pre-typed activities) have no `kind`: treat as generic.
+  const rawKind = asString(raw.kind, 'generic');
+  const details = normalizeDetails(rawKind, raw.details);
+  const kind: ActivityKind = details ? (rawKind as ActivityKind) : 'generic';
+  const fallbackCategory = categoryForKind(kind) ?? 'other';
+  const estimatedCost = asNumber(raw.estimatedCost, 0);
+  const activity: Activity = {
     id: asString(raw.id) || generateId(),
     time: asString(raw.time),
     title: asString(raw.title),
     location: asString(raw.location),
     notes: asString(raw.notes),
-    category: (asString(raw.category, 'other') as Activity['category']) || 'other',
+    category: (asString(raw.category, fallbackCategory) as Activity['category']) || fallbackCategory,
+    kind,
+    details,
+    estimatedCost: estimatedCost > 0 ? estimatedCost : undefined,
   };
+  if (details) activity.time = activityDerivedTime(activity);
+  if (!activity.details) delete activity.details;
+  if (activity.estimatedCost === undefined) delete activity.estimatedCost;
+  return activity;
 }
 
 export function normalizeTrip(raw: unknown): Trip | null {
@@ -132,6 +196,7 @@ export function normalizeExpense(raw: unknown): Expense | null {
     category: (asString(raw.category, 'other') as Expense['category']) || 'other',
     splitMode: raw.splitMode as Expense['splitMode'],
     splitInputs,
+    activityId: asOptionalString(raw.activityId),
   };
 }
 
@@ -173,12 +238,28 @@ function ensureMe(friends: Friend[]): Friend[] {
 /** Raw, untrusted shape of persisted data (anything may be missing or malformed). */
 export type RawAppData = Partial<Record<keyof AppData, unknown>>;
 
+/** Drop expense → activity links whose activity no longer exists. */
+function pruneDanglingLinks(trips: Trip[], expenses: Expense[]): Expense[] {
+  const ids = new Set<string>();
+  for (const trip of trips) for (const { activity } of listActivities(trip)) ids.add(activity.id);
+  return expenses.map((e) => {
+    if (!e.activityId || ids.has(e.activityId)) return e;
+    const rest = { ...e };
+    delete rest.activityId;
+    return rest;
+  });
+}
+
 export function normalizeData(input: RawAppData): AppData {
+  const trips = asArray<unknown>(input.trips).map(normalizeTrip).filter((t): t is Trip => t !== null);
   return {
-    trips: asArray<unknown>(input.trips).map(normalizeTrip).filter((t): t is Trip => t !== null),
-    expenses: asArray<unknown>(input.expenses)
-      .map(normalizeExpense)
-      .filter((e): e is Expense => e !== null),
+    trips,
+    expenses: pruneDanglingLinks(
+      trips,
+      asArray<unknown>(input.expenses)
+        .map(normalizeExpense)
+        .filter((e): e is Expense => e !== null),
+    ),
     friends: ensureMe(
       asArray<unknown>(input.friends).map(normalizeFriend).filter((f): f is Friend => f !== null),
     ),
