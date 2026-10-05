@@ -12,6 +12,30 @@ export function cn(...classes: Array<string | false | null | undefined>): string
   return classes.filter(Boolean).join(' ');
 }
 
+const INTERACTIVE_SELECTOR =
+  'a, button, input, select, textarea, label, [role="button"], [role="link"], [role="checkbox"], [role="menuitem"], [data-no-card-click]';
+
+/** True when a click/key originated on a nested control, so a parent “click to edit” should stand down. */
+export function isInteractiveTarget(target: EventTarget | null): boolean {
+  const el = target instanceof Element ? target : target instanceof Node ? target.parentElement : null;
+  return Boolean(el?.closest(INTERACTIVE_SELECTOR));
+}
+
+/** Parent click/keyboard handler that ignores nested buttons, links, and inputs. */
+export function unlessInteractive(handler: () => void) {
+  return (event: { target: EventTarget | null; currentTarget?: EventTarget | null; key?: string; preventDefault?: () => void }) => {
+    if (event.key !== undefined) {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      if (event.target !== event.currentTarget && isInteractiveTarget(event.target)) return;
+      event.preventDefault?.();
+      handler();
+      return;
+    }
+    if (isInteractiveTarget(event.target)) return;
+    handler();
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Dates. All trip/expense dates are stored as YYYY-MM-DD "date keys" and are
 // treated as local calendar dates. Never pass them straight to `new Date()`,

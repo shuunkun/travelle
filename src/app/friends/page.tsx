@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Users, Plus, Pencil, Trash2, Lock } from 'lucide-react';
 import { Friend } from '@/lib/types';
 import { useApp } from '@/components/providers/AppProvider';
-import { formatCurrency, PRESET_COLORS, pluralize } from '@/lib/utils';
+import { formatCurrency, PRESET_COLORS, pluralize, unlessInteractive } from '@/lib/utils';
 import { getBalanceWithFriend, getFriendUsage, ME_ID } from '@/lib/selectors';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -142,7 +142,12 @@ export default function FriendsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* "You" card */}
           {meFriend && (
-            <Card className="p-6 flex flex-col justify-between relative overflow-hidden group">
+            <Card
+              className="p-6 flex flex-col justify-between relative overflow-hidden group"
+              interactive
+              onClick={unlessInteractive(() => openEdit(meFriend))}
+              title="Click to edit your profile"
+            >
               <div className="absolute top-0 right-0 p-4 flex items-center gap-1">
                 <Badge className="font-normal">You</Badge>
                 <Button variant="ghost" size="sm" onClick={() => openEdit(meFriend)} className="h-8 w-8 p-0 text-gray-400 hover:text-gray-700" aria-label="Edit your profile">
@@ -163,7 +168,13 @@ export default function FriendsPage() {
           {regularFriends.map((friend) => {
             const d = details.get(friend.id);
             return (
-              <Card key={friend.id} className="p-6 flex flex-col justify-between group">
+              <Card
+                key={friend.id}
+                className="p-6 flex flex-col justify-between group"
+                interactive
+                onClick={unlessInteractive(() => openEdit(friend))}
+                title={`Click to edit ${friend.name}`}
+              >
                 <div className="flex justify-between items-start mb-6 gap-2">
                   <div className="flex items-center gap-4 min-w-0">
                     <Avatar name={friend.name} color={friend.color} size="lg" />

@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { Activity, Expense } from '@/lib/types';
 import { Button } from '@/components/ui/Button';
-import { formatCurrency, formatDate, getCategoryIcon, getCategoryLabel, pluralize } from '@/lib/utils';
+import { formatCurrency, formatDate, getCategoryIcon, getCategoryLabel, pluralize, unlessInteractive } from '@/lib/utils';
 import {
   activityActualCost,
   flightArrivalDate,
@@ -47,6 +47,7 @@ export interface ActivityCardProps {
   onAddCost: () => void;
   onLinkExpense: () => void;
   onUnlinkExpense: (expenseId: string) => void;
+  onEditExpense?: (expense: Expense) => void;
 }
 
 const shortDate = (date: string) => formatDate(date, { month: 'short', day: 'numeric' });
@@ -97,6 +98,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
   onAddCost,
   onLinkExpense,
   onUnlinkExpense,
+  onEditExpense,
 }) => {
   const planned = activity.estimatedCost;
   const actual = activityActualCost(linkedExpenses, activity.id);
@@ -207,11 +209,18 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
     ) : null;
   };
 
+  const activate = unlessInteractive(onEdit);
+
   return (
     <div
       data-activity-id={activity.id}
-      tabIndex={-1}
-      className={`flex-1 min-w-0 bg-white p-4 rounded-xl border shadow-sm group outline-none transition-[box-shadow,border-color] duration-500 ${
+      tabIndex={0}
+      role="group"
+      aria-label={`${activity.title}. Click to edit.`}
+      title="Click to edit"
+      onClick={activate}
+      onKeyDown={activate}
+      className={`flex-1 min-w-0 bg-white p-4 rounded-xl border shadow-sm group outline-none cursor-pointer hover:shadow-md hover:border-gray-200 focus-visible:ring-2 focus-visible:ring-[#7C9A82] focus-visible:ring-offset-2 transition-[box-shadow,border-color] duration-200 ${
         highlighted ? 'border-[#7C9A82] ring-2 ring-[#7C9A82]/50 ring-offset-2' : 'border-gray-100'
       }`}
     >
@@ -281,9 +290,16 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
           <ul className="mt-2 flex flex-wrap gap-1.5" aria-label={`Expenses linked to ${activity.title}`}>
             {linkedExpenses.map((expense) => (
               <li key={expense.id} className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white pl-2.5 pr-1 py-0.5 text-xs text-gray-700">
-                <Ticket className="w-3 h-3 text-gray-400" aria-hidden="true" />
-                <span className="truncate max-w-[12rem]">{expense.description}</span>
-                <span className="font-medium tabular-nums">{formatCurrency(expense.amount, expense.currency)}</span>
+                <button
+                  type="button"
+                  onClick={() => onEditExpense?.(expense)}
+                  className="inline-flex min-w-0 items-center gap-1 rounded-full hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#7C9A82]"
+                  title="Edit expense"
+                >
+                  <Ticket className="w-3 h-3 text-gray-400" aria-hidden="true" />
+                  <span className="truncate max-w-[12rem]">{expense.description}</span>
+                  <span className="font-medium tabular-nums">{formatCurrency(expense.amount, expense.currency)}</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => onUnlinkExpense(expense.id)}

@@ -21,6 +21,7 @@ import {
   getCategoryIcon,
   getCategoryLabel,
   pluralize,
+  unlessInteractive,
 } from '@/lib/utils';
 import { getTripSpent } from '@/lib/selectors';
 import { listActivities } from '@/lib/activities';
@@ -33,6 +34,9 @@ export interface ExpensesTabProps {
   people: Friend[];
   /** Jump to an activity in the itinerary (the page switches tabs and focuses it). */
   onGoToActivity?: (activityId: string) => void;
+  /** Open this expense's editor (e.g. clicking a recent expense on Overview). */
+  editExpenseId?: string | null;
+  onEditHandled?: () => void;
 }
 
 type LinkFilter = 'all' | 'linked' | 'unlinked';
@@ -43,7 +47,15 @@ const LINK_FILTERS: { value: LinkFilter; label: string }[] = [
   { value: 'unlinked', label: 'Unlinked' },
 ];
 
-const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, expenses, members, people, onGoToActivity }) => {
+const ExpensesTab: React.FC<ExpensesTabProps> = ({
+  trip,
+  expenses,
+  members,
+  people,
+  onGoToActivity,
+  editExpenseId,
+  onEditHandled,
+}) => {
   const { addExpense, updateExpense, deleteExpense } = useApp();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Expense | undefined>(undefined);
@@ -99,9 +111,13 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, expenses, members, peop
     setModalOpen(true);
   };
 
-  const handleSave = (input: Omit<Expense, 'id'>) => {
-    if (editing) updateExpense(editing.id, input);
-    else addExpense(input);
+  const requestedEdit = editExpenseId ? expenses.find((e) => e.id === editExpenseId) : undefined;
+  const modalExpense = modalOpen ? editing : requestedEdit;
+  const modalIsOpen = modalOpen || Boolean(requestedEdit);
+
+  const closeExpenseModal = () => {
+    setModalOpen(false);
+    if (requestedEdit) onEditHandled?.();
   };
 
   const renderPayer = (expense: Expense) => {
@@ -291,7 +307,12 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, expenses, members, peop
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.map((expense) => (
-                <tr key={expense.id} className="hover:bg-gray-50 group">
+                <tr
+                  key={expense.id}
+                  className="hover:bg-gray-50 group cursor-pointer"
+                  onClick={unlessInteractive(() => openEdit(expense))}
+                  title="Click to edit"
+                >
                   <td className="px-5 py-3.5 whitespace-nowrap text-sm text-gray-500">{formatDate(expense.date)}</td>
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-2">
@@ -326,7 +347,12 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, expenses, members, peop
           {/* Mobile cards */}
           <ul className="md:hidden divide-y divide-gray-100">
             {filtered.map((expense) => (
-              <li key={expense.id} className="p-4">
+              <li
+                key={expense.id}
+                className="p-4 cursor-pointer hover:bg-gray-50"
+                onClick={unlessInteractive(() => openEdit(expense))}
+                title="Click to edit"
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3 min-w-0">
                     <span className="text-xl leading-none mt-0.5" aria-hidden="true">{getCategoryIcon(expense.category)}</span>
@@ -362,12 +388,15 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, expenses, members, peop
       )}
 
       <ExpenseModal
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
+        isOpen={modalIsOpen}
+        onClose={closeExpenseModal}
         trip={trip}
         members={members}
-        expense={editing}
-        onSave={handleSave}
+        expense={modalExpense}
+        onSave={(input) => {
+          if (modalExpense) updateExpense(modalExpense.id, input);
+          else addExpense(input);
+        }}
       />
 
       <ConfirmDialog

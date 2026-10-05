@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Plus, X, ListChecks } from 'lucide-react';
 import { Trip } from '@/lib/types';
 import { Card } from '@/components/ui/Card';
@@ -12,20 +12,38 @@ export interface ChecklistCardProps {
   trip: Trip;
 }
 
-/** Packing / to-do list for a trip. */
+/** Packing / to-do list for a trip. Click an item to rename it. */
 const ChecklistCard: React.FC<ChecklistCardProps> = ({ trip }) => {
-  const { addChecklistItem, toggleChecklistItem, deleteChecklistItem, clearCompletedChecklist } = useApp();
+  const { addChecklistItem, toggleChecklistItem, renameChecklistItem, deleteChecklistItem, clearCompletedChecklist } = useApp();
   const [text, setText] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
+  const editRef = useRef<HTMLInputElement>(null);
 
   const items = trip.checklist ?? [];
   const done = items.filter((i) => i.done).length;
   const pct = items.length === 0 ? 0 : (done / items.length) * 100;
+
+  useEffect(() => {
+    if (editingId) editRef.current?.focus();
+  }, [editingId]);
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!text.trim()) return;
     addChecklistItem(trip.id, text);
     setText('');
+  };
+
+  const startEdit = (id: string, current: string) => {
+    setEditingId(id);
+    setDraft(current);
+  };
+
+  const commitEdit = () => {
+    if (!editingId) return;
+    if (draft.trim()) renameChecklistItem(trip.id, editingId, draft);
+    setEditingId(null);
   };
 
   return (
@@ -53,12 +71,32 @@ const ChecklistCard: React.FC<ChecklistCardProps> = ({ trip }) => {
                 onChange={() => toggleChecklistItem(trip.id, item.id)}
                 className="rounded border-gray-300 accent-[#7C9A82] h-4 w-4"
               />
-              <label
-                htmlFor={`check-${item.id}`}
-                className={`flex-1 text-sm cursor-pointer break-words ${item.done ? 'line-through text-gray-400' : 'text-gray-800'}`}
-              >
-                {item.text}
-              </label>
+              {editingId === item.id ? (
+                <input
+                  ref={editRef}
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onBlur={commitEdit}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      commitEdit();
+                    }
+                    if (e.key === 'Escape') setEditingId(null);
+                  }}
+                  aria-label={`Rename ${item.text}`}
+                  className="flex-1 min-w-0 rounded border border-[#7C9A82] px-1.5 py-0.5 text-sm outline-none ring-1 ring-[#7C9A82]"
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => startEdit(item.id, item.text)}
+                  title="Click to rename"
+                  className={`flex-1 text-left text-sm break-words rounded px-0.5 ${item.done ? 'line-through text-gray-400' : 'text-gray-800'} hover:text-gray-900`}
+                >
+                  {item.text}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => deleteChecklistItem(trip.id, item.id)}

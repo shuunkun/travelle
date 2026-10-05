@@ -1,14 +1,14 @@
 'use client'
 
 import React from 'react';
-import { BedDouble, CalendarDays, ChevronRight, Plane, Receipt, Users, Wallet } from 'lucide-react';
+import { BedDouble, CalendarDays, ChevronRight, Pencil, Plane, Receipt, Users, Wallet } from 'lucide-react';
 import { Expense, Friend, Trip } from '@/lib/types';
 import { TripFinancials } from '@/lib/selectors';
 import { Card } from '@/components/ui/Card';
-import { Avatar } from '@/components/ui/Avatar';
+import { Avatar, AvatarGroup } from '@/components/ui/Avatar';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { ChecklistCard } from './ChecklistCard';
-import { compareDateKeys, formatCurrency, formatSignedCurrency, getCategoryIcon, getDaysBetween, pluralize, formatDate } from '@/lib/utils';
+import { compareDateKeys, formatCurrency, formatSignedCurrency, getCategoryIcon, getDaysBetween, pluralize, formatDate, unlessInteractive } from '@/lib/utils';
 import { ME_ID } from '@/lib/selectors';
 import {
   LocatedActivity,
@@ -32,6 +32,9 @@ export interface OverviewTabProps {
   onGoTo: (tab: 'itinerary' | 'expenses' | 'settle') => void;
   /** Jump to a specific activity in the itinerary. */
   onGoToActivity?: (activityId: string) => void;
+  onEditTrip?: () => void;
+  onEditActivity?: (activityId: string) => void;
+  onEditExpense?: (expenseId: string) => void;
 }
 
 const shortDate = (date: string) => formatDate(date, { month: 'short', day: 'numeric' });
@@ -119,14 +122,23 @@ function BookingRow({
       type="button"
       onClick={() => onSelect(activity.id)}
       className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-gray-50 focus:outline-none focus-visible:bg-[#E8F0EA] rounded-lg"
-      title="Show in itinerary"
+      title="Edit this booking"
     >
       {inner}
     </button>
   );
 }
 
-const OverviewTab: React.FC<OverviewTabProps> = ({ trip, members, financials, onGoTo, onGoToActivity }) => {
+const OverviewTab: React.FC<OverviewTabProps> = ({
+  trip,
+  members,
+  financials,
+  onGoTo,
+  onGoToActivity,
+  onEditTrip,
+  onEditActivity,
+  onEditExpense,
+}) => {
   const { expenses, spent, balances, transfers } = financials;
   const days = getDaysBetween(trip.startDate, trip.endDate);
   const activities = trip.itinerary.reduce((sum, d) => sum + d.activities.length, 0);
@@ -141,13 +153,38 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ trip, members, financials, on
   const overPlan = plan.planned > 0 && plan.actual > plan.planned + 0.004;
 
   const stats = [
-    { icon: CalendarDays, label: pluralize(days, 'day'), sub: `${activities} planned` },
-    { icon: Users, label: pluralize(members.length, 'traveler'), sub: 'on this trip' },
-    { icon: Receipt, label: pluralize(expenses.length, 'expense'), sub: formatCurrency(spent) },
+    {
+      icon: CalendarDays,
+      label: pluralize(days, 'day'),
+      sub: `${activities} planned`,
+      hint: 'go' as const,
+      title: 'Open itinerary',
+      onClick: () => onGoTo('itinerary'),
+    },
+    {
+      icon: Users,
+      label: pluralize(members.length, 'traveler'),
+      sub: members.length === 0 ? 'Add people' : 'Edit travelers',
+      hint: 'edit' as const,
+      title: 'Edit travelers',
+      extra: members.length > 0 ? <AvatarGroup people={members} size="xs" className="mt-2" /> : null,
+      onClick: onEditTrip,
+    },
+    {
+      icon: Receipt,
+      label: pluralize(expenses.length, 'expense'),
+      sub: formatCurrency(spent),
+      hint: 'go' as const,
+      title: 'Open expenses',
+      onClick: () => onGoTo('expenses'),
+    },
     {
       icon: Wallet,
       label: transfers.length === 0 ? 'Settled' : pluralize(transfers.length, 'payment'),
       sub: transfers.length === 0 ? 'nothing owed' : 'to settle up',
+      hint: 'go' as const,
+      title: 'Open settle up',
+      onClick: () => onGoTo('settle'),
     },
   ];
 
@@ -156,10 +193,30 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ trip, members, financials, on
       <div className="lg:col-span-2 space-y-8">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {stats.map((s) => (
-            <Card key={s.label + s.sub} className="p-4">
-              <s.icon className="w-5 h-5 text-[#7C9A82] mb-2" aria-hidden="true" />
+            <Card
+              key={s.label + s.sub}
+              className="p-4"
+              interactive={Boolean(s.onClick)}
+              onClick={s.onClick}
+              role={s.onClick ? 'button' : undefined}
+              tabIndex={s.onClick ? 0 : undefined}
+              onKeyDown={s.onClick ? unlessInteractive(s.onClick) : undefined}
+              title={s.title}
+              aria-label={s.title}
+            >
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <s.icon className="w-5 h-5 text-[#7C9A82]" aria-hidden="true" />
+                {s.hint === 'edit' ? (
+                  <span className="inline-flex items-center justify-center rounded-full bg-[#E8F0EA] text-[#5A7A60] p-1">
+                    <Pencil className="w-3 h-3" aria-hidden="true" />
+                  </span>
+                ) : (
+                  <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-[#7C9A82] transition-colors" aria-hidden="true" />
+                )}
+              </div>
               <p className="text-sm font-semibold text-gray-900">{s.label}</p>
-              <p className="text-xs text-gray-500">{s.sub}</p>
+              <p className={`text-xs ${s.hint === 'edit' ? 'text-[#7C9A82]' : 'text-gray-500'}`}>{s.sub}</p>
+              {s.extra}
             </Card>
           ))}
         </div>
@@ -167,21 +224,41 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ trip, members, financials, on
         {trip.description && (
           <section>
             <h2 className="text-xl font-medium text-gray-900 mb-3">About</h2>
-            <p className="text-gray-600 whitespace-pre-wrap leading-relaxed">{trip.description}</p>
+            <p
+              className={`text-gray-600 whitespace-pre-wrap leading-relaxed rounded-lg ${onEditTrip ? 'cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-1' : ''}`}
+              onClick={onEditTrip}
+              title={onEditTrip ? 'Click to edit trip details' : undefined}
+            >
+              {trip.description}
+            </p>
           </section>
         )}
 
         <section>
           <h2 className="text-xl font-medium text-gray-900 mb-4">Travelers</h2>
           {members.length === 0 ? (
-            <p className="text-sm text-gray-500">No travelers yet. Edit the trip to add friends.</p>
+            <p className="text-sm text-gray-500">
+              No travelers yet.{' '}
+              {onEditTrip ? (
+                <button type="button" onClick={onEditTrip} className="text-[#7C9A82] hover:underline">
+                  Add friends
+                </button>
+              ) : (
+                'Edit the trip to add friends.'
+              )}
+            </p>
           ) : (
             <div className="flex flex-wrap gap-3">
               {members.map((friend) => {
                 const balance = balances.find((b) => b.friendId === friend.id);
                 const net = balance?.net ?? 0;
                 return (
-                  <div key={friend.id} className="flex items-center gap-3 bg-white p-3 pr-4 rounded-xl border border-gray-100 shadow-sm">
+                  <div
+                    key={friend.id}
+                    className={`flex items-center gap-3 bg-white p-3 pr-4 rounded-xl border border-gray-100 shadow-sm ${onEditTrip ? 'cursor-pointer hover:border-gray-200 hover:shadow-md' : ''}`}
+                    onClick={onEditTrip}
+                    title={onEditTrip ? 'Edit travelers' : undefined}
+                  >
                     <Avatar name={friend.name} color={friend.color} />
                     <div className="text-sm">
                       <p className="font-medium text-gray-900">
@@ -213,7 +290,11 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ trip, members, financials, on
               <ul className="divide-y divide-gray-50">
                 {bookings.map((entry) => (
                   <li key={entry.activity.id}>
-                    <BookingRow entry={entry} expenses={expenses} onSelect={onGoToActivity} />
+                    <BookingRow
+                      entry={entry}
+                      expenses={expenses}
+                      onSelect={onEditActivity ?? onGoToActivity}
+                    />
                   </li>
                 ))}
               </ul>
@@ -225,7 +306,12 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ trip, members, financials, on
       </div>
 
       <div className="space-y-6">
-        <Card className="p-6">
+        <Card
+          className="p-6"
+          interactive={Boolean(onEditTrip)}
+          onClick={onEditTrip ? unlessInteractive(onEditTrip) : undefined}
+          title={onEditTrip ? 'Click to edit budget' : undefined}
+        >
           <h3 className="text-lg font-medium text-gray-900 mb-4">Budget</h3>
           {trip.budget > 0 ? (
             <>
@@ -290,15 +376,22 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ trip, members, financials, on
           ) : (
             <ul className="space-y-3">
               {recent.map((exp) => (
-                <li key={exp.id} className="flex justify-between items-center gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="text-xl" aria-hidden="true">{getCategoryIcon(exp.category)}</span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{exp.description}</p>
-                      <p className="text-xs text-gray-400">{formatDate(exp.date)}</p>
+                <li key={exp.id}>
+                  <button
+                    type="button"
+                    onClick={() => (onEditExpense ? onEditExpense(exp.id) : onGoTo('expenses'))}
+                    className="w-full flex justify-between items-center gap-3 rounded-lg px-1 py-1 -mx-1 text-left hover:bg-gray-50"
+                    title="Edit expense"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="text-xl" aria-hidden="true">{getCategoryIcon(exp.category)}</span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{exp.description}</p>
+                        <p className="text-xs text-gray-400">{formatDate(exp.date)}</p>
+                      </div>
                     </div>
-                  </div>
-                  <span className="text-sm font-medium tabular-nums whitespace-nowrap">{formatCurrency(exp.amount, exp.currency)}</span>
+                    <span className="text-sm font-medium tabular-nums whitespace-nowrap">{formatCurrency(exp.amount, exp.currency)}</span>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -320,10 +413,17 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ trip, members, financials, on
                 <p className="text-xs text-gray-400 mb-2">{formatDate(nextDay.date)}</p>
                 <ul className="space-y-1.5">
                   {nextDay.activities.slice(0, 3).map((a) => (
-                    <li key={a.id} className="text-sm text-gray-700 flex items-center gap-2">
-                      <span aria-hidden="true">{getCategoryIcon(a.category)}</span>
-                      <span className="truncate">{a.title}</span>
-                      {a.time && <span className="ml-auto text-xs text-gray-400">{a.time}</span>}
+                    <li key={a.id}>
+                      <button
+                        type="button"
+                        onClick={() => (onEditActivity ? onEditActivity(a.id) : onGoTo('itinerary'))}
+                        className="w-full text-sm text-gray-700 flex items-center gap-2 rounded-md px-1 py-1 -mx-1 text-left hover:bg-gray-50"
+                        title="Edit activity"
+                      >
+                        <span aria-hidden="true">{getCategoryIcon(a.category)}</span>
+                        <span className="truncate">{a.title}</span>
+                        {a.time && <span className="ml-auto text-xs text-gray-400">{a.time}</span>}
+                      </button>
                     </li>
                   ))}
                 </ul>

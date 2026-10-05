@@ -113,6 +113,7 @@ export interface AppActions {
 
   addChecklistItem: (tripId: string, text: string) => void;
   toggleChecklistItem: (tripId: string, itemId: string) => void;
+  renameChecklistItem: (tripId: string, itemId: string, text: string) => void;
   deleteChecklistItem: (tripId: string, itemId: string) => void;
   clearCompletedChecklist: (tripId: string) => void;
 
@@ -212,6 +213,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       },
       toggleChecklistItem: (tripId, itemId) =>
         updateTripWith(tripId, (trip) => tripHelpers.toggleChecklistItem(trip, itemId)),
+      renameChecklistItem: (tripId, itemId, text) =>
+        updateTripWith(tripId, (trip) => tripHelpers.renameChecklistItem(trip, itemId, text)),
       deleteChecklistItem: (tripId, itemId) =>
         updateTripWith(tripId, (trip) => tripHelpers.removeChecklistItem(trip, itemId)),
       clearCompletedChecklist: (tripId) =>

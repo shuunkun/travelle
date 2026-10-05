@@ -39,9 +39,19 @@ export interface ItineraryTabProps {
   focusActivityId?: string | null;
   /** Called once the focus request has been handled so the parent can clear it. */
   onFocusHandled?: () => void;
+  /** When set, open this activity's editor (e.g. clicking a booking on Overview). */
+  editActivityId?: string | null;
+  onEditHandled?: () => void;
 }
 
-const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, today, focusActivityId, onFocusHandled }) => {
+const ItineraryTab: React.FC<ItineraryTabProps> = ({
+  trip,
+  today,
+  focusActivityId,
+  onFocusHandled,
+  editActivityId,
+  onEditHandled,
+}) => {
   const {
     friends,
     expenses,
@@ -51,14 +61,31 @@ const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, today, focusActivityI
     moveActivity,
     moveActivityToDay,
     addExpense,
+    updateExpense,
     linkExpenseToActivity,
   } = useApp();
 
-  const [modal, setModal] = useState<{ date: string; activity?: Activity } | null>(null);
+  const [localModal, setLocalModal] = useState<{ date: string; activity?: Activity } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ date: string; activity: Activity } | null>(null);
   const [costTarget, setCostTarget] = useState<{ date: string; activity: Activity } | null>(null);
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [linkTarget, setLinkTarget] = useState<Activity | null>(null);
-  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+
+  const requestedEdit = (() => {
+    if (!editActivityId) return null;
+    for (const day of trip.itinerary) {
+      const activity = day.activities.find((a) => a.id === editActivityId);
+      if (activity) return { date: day.date, activity };
+    }
+    return null;
+  })();
+
+  const modal = localModal ?? requestedEdit;
+
+  const closeModal = () => {
+    setLocalModal(null);
+    if (requestedEdit) onEditHandled?.();
+  };
 
   const tripExpenses = useMemo(() => getTripExpenses(expenses, trip.id), [expenses, trip.id]);
   const members = useMemo(() => getTripMembers(trip, friends), [trip, friends]);
@@ -67,10 +94,7 @@ const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, today, focusActivityI
   const totalActivities = trip.itinerary.reduce((sum, d) => sum + d.activities.length, 0);
   const firstInRangeIndex = trip.itinerary.findIndex((d) => isDayInRange(trip, d.date));
 
-  // A focus request from the parent (e.g. an expense chip) highlights the
-  // activity for as long as the request is pending; the parent clears it via
-  // `onFocusHandled`. Local highlights (stay banners) use `highlightedId`.
-  const activeHighlightId = highlightedId ?? focusActivityId ?? null;
+  const activeHighlightId = focusActivityId ?? null;
 
   // Scroll to a requested activity once it's in the DOM (no state writes here —
   // the highlight is derived from the prop above).
@@ -82,14 +106,6 @@ const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, today, focusActivityI
     const timer = window.setTimeout(() => onFocusHandled?.(), 2500);
     return () => window.clearTimeout(timer);
   }, [focusActivityId, onFocusHandled]);
-
-  const focusActivity = (activityId: string) => {
-    const el = document.querySelector<HTMLElement>(`[data-activity-id="${CSS.escape(activityId)}"]`);
-    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    el?.focus({ preventScroll: true });
-    setHighlightedId(activityId);
-    window.setTimeout(() => setHighlightedId((cur) => (cur === activityId ? null : cur)), 2500);
-  };
 
   const handleSave = (targetDate: string, input: Omit<Activity, 'id'>) => {
     if (!modal) return;
@@ -131,7 +147,7 @@ const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, today, focusActivityI
           {pluralize(trip.itinerary.length, 'day')} · {pluralize(totalActivities, 'activity', 'activities')}
           {linkedCount > 0 && <> · {pluralize(linkedCount, 'linked expense')}</>}
         </p>
-        <Button size="sm" onClick={() => setModal({ date: trip.itinerary[0].date })} icon={<Plus className="w-4 h-4" aria-hidden="true" />}>
+        <Button size="sm" onClick={() => setLocalModal({ date: trip.itinerary[0].date })} icon={<Plus className="w-4 h-4" aria-hidden="true" />}>
           Add activity
         </Button>
       </div>
@@ -154,7 +170,7 @@ const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, today, focusActivityI
                   {formatWeekday(day.date)}, {formatDate(day.date)}
                 </p>
               </div>
-              <Button variant="outline" size="sm" onClick={() => setModal({ date: day.date })}>
+              <Button variant="outline" size="sm" onClick={() => setLocalModal({ date: day.date })}>
                 <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> Add
               </Button>
             </div>
@@ -168,9 +184,9 @@ const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, today, focusActivityI
                       <li key={stay.activity.id}>
                         <button
                           type="button"
-                          onClick={() => focusActivity(stay.activity.id)}
-                          className="w-full flex items-center gap-2.5 rounded-lg bg-purple-50/70 border border-purple-100 px-3 py-2 text-left text-sm text-purple-800 hover:bg-purple-50 focus:outline-none focus:ring-2 focus:ring-purple-300"
-                          title="Jump to this booking"
+                          onClick={() => setLocalModal({ date: activityHomeDate(stay.activity, day.date), activity: stay.activity })}
+                          className="w-full flex items-center gap-2.5 rounded-lg bg-purple-50/70 border border-purple-100 px-3 py-2 text-left text-sm text-purple-800 hover:bg-purple-50 hover:border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-300"
+                          title="Edit this stay"
                         >
                           {stay.isCheckOut ? (
                             <LogOut className="w-4 h-4 shrink-0 text-purple-500" aria-hidden="true" />
@@ -200,9 +216,13 @@ const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, today, focusActivityI
               )}
 
               {day.activities.length === 0 ? (
-                <p className="text-gray-400 text-sm text-center py-3">
-                  {stays.length > 0 ? 'Nothing else planned.' : 'Nothing planned yet.'}
-                </p>
+                <button
+                  type="button"
+                  onClick={() => setLocalModal({ date: day.date })}
+                  className="w-full text-gray-400 text-sm text-center py-3 rounded-lg border border-dashed border-transparent hover:border-gray-200 hover:bg-gray-50 hover:text-[#7C9A82] transition-colors"
+                >
+                  {stays.length > 0 ? 'Add something else…' : 'Nothing planned yet — click to add'}
+                </button>
               ) : (
                 <ol className="space-y-5">
                   {day.activities.map((activity, index) => (
@@ -219,12 +239,13 @@ const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, today, focusActivityI
                         count={day.activities.length}
                         linkedExpenses={expensesForActivity(tripExpenses, activity.id)}
                         highlighted={activeHighlightId === activity.id}
-                        onEdit={() => setModal({ date: day.date, activity })}
+                        onEdit={() => setLocalModal({ date: day.date, activity })}
                         onDelete={() => setPendingDelete({ date: day.date, activity })}
                         onMove={(direction) => moveActivity(trip.id, day.date, activity.id, direction)}
                         onAddCost={() => openAddCost(day.date, activity)}
                         onLinkExpense={() => setLinkTarget(activity)}
                         onUnlinkExpense={(expenseId) => linkExpenseToActivity(expenseId, undefined)}
+                        onEditExpense={(expense) => setEditingExpense(expense)}
                       />
                     </li>
                   ))}
@@ -238,7 +259,7 @@ const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, today, focusActivityI
       {modal && (
         <ActivityModal
           isOpen
-          onClose={() => setModal(null)}
+          onClose={closeModal}
           trip={trip}
           date={modal.date}
           activity={modal.activity}
@@ -260,6 +281,17 @@ const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, today, focusActivityI
             amount: costTarget.activity.estimatedCost,
           }}
           onSave={handleAddCost}
+        />
+      )}
+
+      {editingExpense && (
+        <ExpenseModal
+          isOpen
+          onClose={() => setEditingExpense(null)}
+          trip={trip}
+          members={members}
+          expense={editingExpense}
+          onSave={(input) => updateExpense(editingExpense.id, input)}
         />
       )}
 

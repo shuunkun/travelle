@@ -126,6 +126,15 @@ export function toggleChecklistItem(trip: Trip, itemId: string): Trip {
   };
 }
 
+export function renameChecklistItem(trip: Trip, itemId: string, text: string): Trip {
+  const trimmed = text.trim();
+  if (!trimmed) return trip;
+  return {
+    ...trip,
+    checklist: (trip.checklist ?? []).map((item) => (item.id === itemId ? { ...item, text: trimmed } : item)),
+  };
+}
+
 export function removeChecklistItem(trip: Trip, itemId: string): Trip {
   return { ...trip, checklist: (trip.checklist ?? []).filter((item) => item.id !== itemId) };
 }

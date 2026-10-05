@@ -76,35 +76,44 @@ export default function Dashboard() {
 
       {/* Quick stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-12">
-        <Card className="p-6 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-[#E8F0EA] flex items-center justify-center text-[#5A7A60] shrink-0">
-            <MapPin className="w-6 h-6" aria-hidden="true" />
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">Total trips</p>
-            <p className="text-2xl font-semibold text-gray-900">{trips.length}</p>
-          </div>
-        </Card>
-        <Card className="p-6 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-[#F5F0E8] flex items-center justify-center text-[#a8946a] shrink-0">
-            <Calendar className="w-6 h-6" aria-hidden="true" />
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">Upcoming</p>
-            <p className="text-2xl font-semibold text-gray-900">{upcoming.length}</p>
-          </div>
-        </Card>
-        <Card className="p-6 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-[#E0F0EF] flex items-center justify-center text-[#6BA3A0] shrink-0">
-            <Wallet className="w-6 h-6" aria-hidden="true" />
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">{outstanding > 0.004 ? "You're owed" : outstanding < -0.004 ? 'You owe' : 'Balance'}</p>
-            <p className={`text-2xl font-semibold ${outstanding > 0.004 ? 'text-[#6BA3A0]' : outstanding < -0.004 ? 'text-[#C47C7C]' : 'text-gray-900'}`}>
-              {Math.abs(outstanding) < 0.005 ? 'Settled up' : formatSignedCurrency(outstanding)}
-            </p>
-          </div>
-        </Card>
+        <Link href="/trips" className="block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7C9A82]">
+          <Card className="p-6 flex items-center gap-4 h-full" interactive>
+            <div className="w-12 h-12 rounded-full bg-[#E8F0EA] flex items-center justify-center text-[#5A7A60] shrink-0">
+              <MapPin className="w-6 h-6" aria-hidden="true" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Total trips</p>
+              <p className="text-2xl font-semibold text-gray-900">{trips.length}</p>
+            </div>
+          </Card>
+        </Link>
+        <Link href="/trips" className="block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7C9A82]">
+          <Card className="p-6 flex items-center gap-4 h-full" interactive>
+            <div className="w-12 h-12 rounded-full bg-[#F5F0E8] flex items-center justify-center text-[#a8946a] shrink-0">
+              <Calendar className="w-6 h-6" aria-hidden="true" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Upcoming</p>
+              <p className="text-2xl font-semibold text-gray-900">{upcoming.length}</p>
+            </div>
+          </Card>
+        </Link>
+        <Link
+          href={unsettledTrips[0] ? `/trips/${unsettledTrips[0].trip.id}` : '/trips'}
+          className="block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7C9A82]"
+        >
+          <Card className="p-6 flex items-center gap-4 h-full" interactive>
+            <div className="w-12 h-12 rounded-full bg-[#E0F0EF] flex items-center justify-center text-[#6BA3A0] shrink-0">
+              <Wallet className="w-6 h-6" aria-hidden="true" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">{outstanding > 0.004 ? "You're owed" : outstanding < -0.004 ? 'You owe' : 'Balance'}</p>
+              <p className={`text-2xl font-semibold ${outstanding > 0.004 ? 'text-[#6BA3A0]' : outstanding < -0.004 ? 'text-[#C47C7C]' : 'text-gray-900'}`}>
+                {Math.abs(outstanding) < 0.005 ? 'Settled up' : formatSignedCurrency(outstanding)}
+              </p>
+            </div>
+          </Card>
+        </Link>
       </div>
 
       {/* Settle-up nudges */}
@@ -113,30 +122,36 @@ export default function Dashboard() {
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Settle up</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {unsettledTrips.slice(0, 4).map(({ trip, transfers }) => (
-              <Card key={trip.id} className="p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="font-medium text-gray-900 truncate">{trip.name}</p>
-                  <Link href={`/trips/${trip.id}`} className="text-sm text-[#7C9A82] hover:underline inline-flex items-center shrink-0">
-                    Settle <ArrowRight className="w-3.5 h-3.5 ml-1" aria-hidden="true" />
-                  </Link>
-                </div>
-                <ul className="space-y-1.5">
-                  {transfers.map((t) => {
-                    const other = friends.find((f) => f.id === (t.from === ME_ID ? t.to : t.from))
-                    return (
-                      <li key={`${t.from}-${t.to}`} className="flex items-center gap-2 text-sm">
-                        {other && <Avatar name={other.name} color={other.color} size="xs" />}
-                        <span className="text-gray-600 truncate">
-                          {t.from === ME_ID ? `You pay ${nameOf(t.to)}` : `${nameOf(t.from)} pays you`}
-                        </span>
-                        <span className={`ml-auto font-medium tabular-nums ${t.from === ME_ID ? 'text-[#C47C7C]' : 'text-teal-600'}`}>
-                          {formatCurrency(t.amount)}
-                        </span>
-                      </li>
-                    )
-                  })}
-                </ul>
-              </Card>
+              <Link
+                key={trip.id}
+                href={`/trips/${trip.id}`}
+                className="block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7C9A82]"
+              >
+                <Card className="p-5 h-full" interactive>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="font-medium text-gray-900 truncate">{trip.name}</p>
+                    <span className="text-sm text-[#7C9A82] inline-flex items-center shrink-0">
+                      Settle <ArrowRight className="w-3.5 h-3.5 ml-1" aria-hidden="true" />
+                    </span>
+                  </div>
+                  <ul className="space-y-1.5">
+                    {transfers.map((t) => {
+                      const other = friends.find((f) => f.id === (t.from === ME_ID ? t.to : t.from))
+                      return (
+                        <li key={`${t.from}-${t.to}`} className="flex items-center gap-2 text-sm">
+                          {other && <Avatar name={other.name} color={other.color} size="xs" />}
+                          <span className="text-gray-600 truncate">
+                            {t.from === ME_ID ? `You pay ${nameOf(t.to)}` : `${nameOf(t.from)} pays you`}
+                          </span>
+                          <span className={`ml-auto font-medium tabular-nums ${t.from === ME_ID ? 'text-[#C47C7C]' : 'text-teal-600'}`}>
+                            {formatCurrency(t.amount)}
+                          </span>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </Card>
+              </Link>
             ))}
           </div>
         </section>

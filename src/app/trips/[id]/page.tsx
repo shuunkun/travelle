@@ -40,12 +40,26 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
   // Pending "show me this activity" request; ItineraryTab scrolls to it and
   // highlights it until it reports back via onFocusHandled.
   const [focusActivityId, setFocusActivityId] = useState<string | null>(null);
+  const [editActivityId, setEditActivityId] = useState<string | null>(null);
+  const [editExpenseId, setEditExpenseId] = useState<string | null>(null);
 
   const goToActivity = useCallback((activityId: string) => {
     setFocusActivityId(activityId);
     setActiveTab('itinerary');
   }, []);
   const handleFocusHandled = useCallback(() => setFocusActivityId(null), []);
+
+  const goToEditActivity = useCallback((activityId: string) => {
+    setEditActivityId(activityId);
+    setActiveTab('itinerary');
+  }, []);
+  const handleEditActivityHandled = useCallback(() => setEditActivityId(null), []);
+
+  const goToEditExpense = useCallback((expenseId: string) => {
+    setEditExpenseId(expenseId);
+    setActiveTab('expenses');
+  }, []);
+  const handleEditExpenseHandled = useCallback(() => setEditExpenseId(null), []);
 
   const financials = useMemo(
     () => (trip ? getTripFinancials({ trips: app.trips, expenses, friends, settlements }, trip) : null),
@@ -136,8 +150,18 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
               </Button>
             </div>
           </div>
-          <div>
-            <Badge className="bg-white/90 text-gray-800 mb-3">{STATUS_LABEL[status]}</Badge>
+          <button
+            type="button"
+            onClick={() => setEditOpen(true)}
+            className="text-left rounded-xl -mx-2 px-2 py-2 hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70 group/hero"
+            title="Edit trip details"
+          >
+            <Badge className="bg-white/90 text-gray-800 mb-3">
+              {STATUS_LABEL[status]}
+              <span className="ml-2 hidden sm:inline font-normal text-gray-400 opacity-0 transition-opacity group-hover/hero:opacity-100">
+                · click to edit
+              </span>
+            </Badge>
             <h1 className="text-3xl sm:text-4xl font-light mb-2 drop-shadow-sm">{trip.name}</h1>
             <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm font-medium text-white/90">
               <div className="flex items-center">
@@ -150,7 +174,7 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
               </div>
               <span className="text-white/70">{pluralize(members.length, 'traveler')}</span>
             </div>
-          </div>
+          </button>
         </div>
       </div>
 
@@ -158,13 +182,37 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
         <Tabs tabs={tabs} value={activeTab} onChange={setActiveTab} aria-label="Trip sections" className="mb-8" />
 
         {activeTab === 'overview' && (
-          <OverviewTab trip={trip} members={members} financials={financials} onGoTo={setActiveTab} onGoToActivity={goToActivity} />
+          <OverviewTab
+            trip={trip}
+            members={members}
+            financials={financials}
+            onGoTo={setActiveTab}
+            onGoToActivity={goToActivity}
+            onEditTrip={() => setEditOpen(true)}
+            onEditActivity={goToEditActivity}
+            onEditExpense={goToEditExpense}
+          />
         )}
         {activeTab === 'itinerary' && (
-          <ItineraryTab trip={trip} today={today} focusActivityId={focusActivityId} onFocusHandled={handleFocusHandled} />
+          <ItineraryTab
+            trip={trip}
+            today={today}
+            focusActivityId={focusActivityId}
+            onFocusHandled={handleFocusHandled}
+            editActivityId={editActivityId}
+            onEditHandled={handleEditActivityHandled}
+          />
         )}
         {activeTab === 'expenses' && (
-          <ExpensesTab trip={trip} expenses={financials.expenses} members={members} people={people} onGoToActivity={goToActivity} />
+          <ExpensesTab
+            trip={trip}
+            expenses={financials.expenses}
+            members={members}
+            people={people}
+            onGoToActivity={goToActivity}
+            editExpenseId={editExpenseId}
+            onEditHandled={handleEditExpenseHandled}
+          />
         )}
         {activeTab === 'settle' && (
           <SettleTab
