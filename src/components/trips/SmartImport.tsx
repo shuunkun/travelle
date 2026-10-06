@@ -82,6 +82,7 @@ export function SmartImport(props: Props) {
   const [skipChecklist, setSkipChecklist] = useState<Set<number>>(() => new Set());
   const [skipPeople, setSkipPeople] = useState<Set<string>>(() => new Set());
   const [extendRange, setExtendRange] = useState(true);
+  const [keepNotes, setKeepNotes] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const read = () => {
@@ -120,6 +121,10 @@ export function SmartImport(props: Props) {
   const unplacedItems = placed.filter((p) => !p.date);
   const checklist = parsed?.checklist.filter((_, i) => !skipChecklist.has(i)) ?? [];
   const people = (parsed?.travelerNames ?? []).map((name) => ({ name, friend: matchFriend(name, friends) }));
+  const notes = (parsed?.notes ?? []).filter(
+    (n, i, all) => all.findIndex((m) => m.toLowerCase() === n.toLowerCase()) === i,
+  );
+  const notesText = keepNotes ? notes.map((n) => `• ${n}`).join('\n') : '';
 
   // Range needed to hold every chosen item.
   let needStart = start;
@@ -142,6 +147,7 @@ export function SmartImport(props: Props) {
     if (props.mode === 'existing') {
       const trip = props.trip;
       if (outsideRange && extendRange) updateTrip(trip.id, { startDate: needStart, endDate: needEnd });
+      if (notesText) updateTrip(trip.id, { description: [trip.description.trim(), notesText].filter(Boolean).join('\n\n') });
       for (const { item, date } of chosen) addActivity(trip.id, date!, item.activity);
       checklist.forEach((t) => addChecklistItem(trip.id, t));
       props.onDone();
@@ -169,7 +175,7 @@ export function SmartImport(props: Props) {
       startDate,
       endDate,
       coverImage: DEFAULT_COVER,
-      description: '',
+      description: notesText,
       travelers,
       budget: Number.isFinite(budget) && budget > 0 ? budget : 0,
       checklist: checklist.map((t) => ({ id: generateId(), text: t, done: false })),
@@ -378,6 +384,26 @@ export function SmartImport(props: Props) {
               );
             })}
           </ul>
+        </section>
+      )}
+
+      {notes.length > 0 && (
+        <section>
+          <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-3">Travel notes</h3>
+          <ul className={`space-y-1 text-sm ${keepNotes ? 'text-gray-700' : 'text-gray-400 line-through'}`}>
+            {notes.map((n, i) => (
+              <li key={i}>• {n}</li>
+            ))}
+          </ul>
+          <label className="mt-2 flex items-center gap-2 text-sm text-gray-600">
+            <input
+              type="checkbox"
+              className="rounded border-gray-300 text-[#7C9A82] focus:ring-[#7C9A82]"
+              checked={keepNotes}
+              onChange={(e) => setKeepNotes(e.target.checked)}
+            />
+            Save these to the trip description
+          </label>
         </section>
       )}
 

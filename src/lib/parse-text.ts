@@ -37,6 +37,10 @@ export interface ParsedTripText {
   travelerNames: string[];
   checklist: string[];
   items: ParsedItem[];
+  /** Practical tips (visa, SIM, payment) that aren't plans. */
+  notes: string[];
+  /** Places named in the text ("📍 Guangzhou"), in order, without duplicates. */
+  places: string[];
   unplaced: string[];
 }
 
@@ -58,7 +62,7 @@ export const AIRPORT_CITIES: Record<string, string> = {
   SYD: 'Sydney', MEL: 'Melbourne', BNE: 'Brisbane', PER: 'Perth', ADL: 'Adelaide', CBR: 'Canberra',
   OOL: 'Gold Coast', CNS: 'Cairns', HBA: 'Hobart', DRW: 'Darwin', AKL: 'Auckland', CHC: 'Christchurch',
   ZQN: 'Queenstown', WLG: 'Wellington', NAN: 'Nadi',
-  HKG: 'Hong Kong', MFM: 'Macau', CAN: 'Guangzhou', SZX: 'Shenzhen', PEK: 'Beijing', PKX: 'Beijing',
+  HKG: 'Hong Kong', MFM: 'Macau', BWN: 'Brunei', KCH: 'Kuching', LGK: 'Langkawi', CAN: 'Guangzhou', SZX: 'Shenzhen', PEK: 'Beijing', PKX: 'Beijing',
   PVG: 'Shanghai', SHA: 'Shanghai', CTU: 'Chengdu', TFU: 'Chengdu', XIY: "Xi'an", HGH: 'Hangzhou',
   KMG: 'Kunming', CKG: 'Chongqing', XMN: 'Xiamen', TPE: 'Taipei', TSA: 'Taipei', KHH: 'Kaohsiung',
   NRT: 'Tokyo', HND: 'Tokyo', KIX: 'Osaka', ITM: 'Osaka', NGO: 'Nagoya', CTS: 'Sapporo', FUK: 'Fukuoka',
@@ -91,7 +95,32 @@ const PRICE_RE = new RegExp(
 );
 
 const HOTEL_RE =
-  /\b(hotel|hostel|resort|motel|inn|airbnb|apartment|serviced apartment|guesthouse|guest house|ryokan|lodge|suites?|accommodation|check[- ]?in|staying at|stay at|stay:)/i;
+  /\b(?:hotel|hostel|resort|motel|inn|airbnb|apartments?|serviced apartment|guesthouse|guest house|ryokan|lodge|suites?|accommodation|check[- ]?in|staying at|stay at)\b|\bstay:/i;
+const CHECKOUT_RE = /\bcheck[- ]?out\b/i;
+const PLACEHOLDER_RE = /^(?:tba|tbc|tbd|as above|same(?: as above)?|ditto|n\/?a|-+|\?+)$/i;
+const REF_LINE_RE =
+  /^(?:reservation|reserv|booking(?:\s+ref(?:erence)?)?|confirmation(?:\s+(?:no\.?|number))?|conf|ref(?:erence)?|pnr)\s*(?:no\.?|number|#)?\s*[:#-]?\s*([A-Z0-9]{5,10})$/i;
+/** Column headings from pasted tables ("Dates | Activities | Transport & Accommodation"). */
+const TABLE_HEADER_RE =
+  /^(?:dates?|days?|activities|activity|plans?|itinerary|time|times|location|locations|places?|transport(?:ation)?(?:\s*(?:&|and|\/)\s*accomm?odations?)?|accomm?odations?|stays?|misc(?:ellaneous)?|notes?|other|costs?|budget|to ?do)$/i;
+
+// Leading emoji labels used in spreadsheet / Notion itineraries.
+const EMOJI_RE = /^[\p{Extended_Pictographic}\p{Regional_Indicator}\uFE0F\u200D\u20E3\s]+/u;
+const FLAG_RE = /[\p{Regional_Indicator}]/gu;
+type LineHint = 'place' | 'hotel' | 'flight' | 'transport' | 'note' | 'food';
+const EMOJI_HINTS: [RegExp, LineHint][] = [
+  [/📍|🗺|🧭/u, 'place'],
+  [/🏩|🏨|🏠|🏡|🛏|🛌|⛺|🏕/u, 'hotel'],
+  [/✈|🛫|🛬|🛩/u, 'flight'],
+  [/🚕|🚖|🚗|🚙|🚆|🚄|🚅|🚇|🚈|🚉|🚊|🚝|🚞|🚋|🚌|🚍|🚎|⛴|🚢|🛳|🚤|⛵|🚲|🛵|🚡|🚠|🚟/u, 'transport'],
+  [/🍜|🍣|🍱|🍲|🥟|🍽|🍴|☕|🍺|🍷|🍸|🥘|🍛|🍝|🍔|🍕/u, 'food'],
+  [/📱|💳|💰|💵|💴|💶|💷|🛑|🟩|🟥|🟨|🪪|🛂|ℹ|⚠|❗|‼|📝|🔌|💊|🧳|📶/u, 'note'],
+];
+
+const CITY_ALIASES: Record<string, string> = {
+  HK: 'Hong Kong', GZ: 'Guangzhou', SZ: 'Shenzhen', SG: 'Singapore', KL: 'Kuala Lumpur', BJ: 'Beijing',
+  SH: 'Shanghai', NYC: 'New York', LA: 'Los Angeles', SF: 'San Francisco', MEL: 'Melbourne', SYD: 'Sydney',
+};
 const FLIGHT_WORD_RE = /\b(flight|flights|fly|flying|depart(?:s|ure)?|airline|boarding)\b/i;
 
 const CATEGORY_WORDS: [ActivityCategory, RegExp][] = [
@@ -224,10 +253,15 @@ export function findTimes(text: string): TimeHit[] {
     else if (pm) h += 12;
     add(m.index, m[0].length, h, Number(m[2] ?? 0));
   }
-  const clock = /\b([01]?\d|2[0-3])[:h]([0-5]\d)\b/g;
+  const noon = /\b(?:12\s*)?(noon|midday|midnight)\b/gi;
+  while ((m = noon.exec(text))) add(m.index, m[0].length, m[1].toLowerCase() === 'midnight' ? 0 : 12, 0);
+  const clock = /\b([01]?\d|2[0-3])[:h]([0-5]\d)(?:\s?hrs?\b)?(?!\d)/gi;
   while ((m = clock.exec(text))) add(m.index, m[0].length, Number(m[1]), Number(m[2]));
   const military = /\b([01]\d|2[0-3])([0-5]\d)\s?(?:hrs?|h)\b/gi;
   while ((m = military.exec(text))) add(m.index, m[0].length, Number(m[1]), Number(m[2]));
+  // "1400: Land in HK" — a bare 24h time leading the line.
+  const leading = /^\s*([01]\d|2[0-3])([0-5]\d)(?=\s*[:\-–—])/.exec(text);
+  if (leading) add(leading.index, leading[0].length, Number(leading[1]), Number(leading[2]));
   return hits.sort((a, b) => a.index - b.index);
 }
 
@@ -329,9 +363,40 @@ function tidy(text: string): string {
     .replace(new RegExp(`\\b${WEEKDAY_RE}(?=\\s|$)`, 'gi'), ' ')
     .replace(/\(\s*\)/g, ' ')
     .replace(/\s{2,}/g, ' ')
-    .replace(/^[\s,;:|@–—\-–>]+|[\s,;:|@–—\-–]+$/g, '')
+    .replace(/^[\s,;:|@–—\-–>→←↔]+|[\s,;:|@–—\-–>→←↔]+$/g, '')
     .trim();
 }
+
+/** Split a leading emoji label ("🏩: Some Hotel") into a hint and the text. */
+function splitEmoji(line: string): { hint?: LineHint; content: string } {
+  const m = EMOJI_RE.exec(line);
+  if (!m || !/[^\s]/.test(m[0])) return { content: line };
+  const emoji = m[0];
+  const hint = EMOJI_HINTS.find(([re]) => re.test(emoji))?.[1];
+  return { hint, content: line.slice(m[0].length).replace(/^\s*[:：\-–]\s*/, '').trim() };
+}
+
+/** "Land in HK ＞ Guangzhou" → ["Hong Kong", "Guangzhou"]. */
+function placesIn(text: string): string[] {
+  return text
+    .replace(FLAG_RE, '')
+    .split(/\s*(?:>|＞|→|->|–|—|\/|,|&|\band\b)\s*/i)
+    .map((p) =>
+      p
+        .replace(/\([^)]*\)/g, '')
+        .replace(/^(?:land(?:ed|ing)?\s+in|arrive\s+(?:in|at)|fly\s+to|head\s+to|back\s+to|in)\s+/i, '')
+        .replace(/\b(?:day\s*trip|trip|visit|maybe|optional)\b/gi, '')
+        .replace(/[?!.]+/g, '')
+        .trim(),
+    )
+    .filter((p) => p && p.length <= 40)
+    .map((p) => CITY_ALIASES[p.toUpperCase()] ?? p);
+}
+
+/** Opening hours in brackets, "(10:00 - 22:00)", which are not the plan's start time. */
+const HOURS_RE = /\(\s*(?:open\s*)?(\d{1,2}[:.]?\d{2}\s*(?:am|pm)?\s*[-–—~to]+\s*\d{1,2}[:.]?\d{2}\s*(?:am|pm)?)\s*\)/i;
+
+const normName = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 function categorize(text: string): ActivityCategory {
   for (const [category, re] of CATEGORY_WORDS) if (re.test(text)) return category;
@@ -353,8 +418,12 @@ function cleanHotelName(raw: string): { name: string; address: string } {
     .replace(/^(?:at|in)\s+/i, '')
     .replace(/\s+(?:from|on|until|till|to|for)$/i, '')
     .split(/\s*(?:,|\||;|–|—| - )\s*/)
-    .map((p) => p.trim())
+    .map((p) => p.trim().replace(/[:：]+$/, '').trim())
     .filter(Boolean);
+  // Brand suffixes ("…, Curio Collection by Hilton") belong to the name, not the address.
+  while (parts.length > 1 && /\b(?:by|collection|autograph|curio|tribute|marriott|hilton|hyatt|accor|ihg|mgallery)\b/i.test(parts[1])) {
+    parts.splice(0, 2, `${parts[0]}, ${parts[1]}`);
+  }
   return { name: parts[0] ?? '', address: parts.slice(1).join(', ') };
 }
 
@@ -377,7 +446,7 @@ const META_RE = {
 };
 
 export function parseTripText(text: string, ctx: ParseContext): ParsedTripText {
-  const result: ParsedTripText = { travelerNames: [], checklist: [], items: [], unplaced: [] };
+  const result: ParsedTripText = { travelerNames: [], checklist: [], items: [], notes: [], places: [], unplaced: [] };
   const lines = text.replace(/\r\n?/g, '\n').split('\n');
   const yearMatch = /\b(20\d{2})\b/.exec(text);
   const resolver = new DateResolver(ctx.startDate ?? ctx.today, ctx.startDate ? Number(ctx.startDate.slice(0, 4)) : yearMatch ? Number(yearMatch[1]) : undefined);
@@ -388,8 +457,51 @@ export function parseTripText(text: string, ctx: ParseContext): ParsedTripText {
   let currentDayNumber: number | undefined;
   let inChecklist = false;
   const consumed = new Set<number>();
+  /** Hotels whose check-out came from the text (not inferred). */
+  const explicitCheckout = new Set<string>();
+  /** A "Reservation: XXXX" line waiting for the booking it belongs to. */
+  let pendingRef: { ref: string; kind?: 'flight' | 'hotel'; date?: string } | undefined;
+  let lastAddedFromLine = -1;
+  let lineIndex = -1;
 
-  const addItem = (item: Omit<ParsedItem, 'key'>) => result.items.push({ ...item, key: nextKey() });
+  const addItem = (item: Omit<ParsedItem, 'key'>) => {
+    const d = item.activity.details;
+    if (d && pendingRef && !d.bookingReference && (!pendingRef.kind || pendingRef.kind === d.type) && pendingRef.date === currentDate) {
+      d.bookingReference = pendingRef.ref;
+      // One reservation often covers every flight that day; keep it for flights.
+      if (d.type !== 'flight') pendingRef = undefined;
+    }
+    result.items.push({ ...item, key: nextKey() });
+    lastAddedFromLine = lineIndex;
+  };
+
+  const lastHotel = () => {
+    for (let i = result.items.length - 1; i >= 0; i -= 1) {
+      if (result.items[i].activity.details?.type === 'hotel') return result.items[i];
+    }
+    return undefined;
+  };
+
+  /** "Check-out 08:00" / "Some Hotel checkout - 12noon": end the matching stay. */
+  const applyCheckout = (text: string): boolean => {
+    const dateHit = findDates(text)[0];
+    const date = dateHit ? resolver.resolve(dateHit) : currentDate;
+    if (!date) return false;
+    const hotels = result.items.filter((i) => i.activity.details?.type === 'hotel');
+    const normalized = normName(text);
+    const target =
+      hotels.find((h) => normalized.includes(normName((h.activity.details as HotelDetails).hotelName))) ??
+      [hotels[hotels.length - 1]].find((h) => h && !explicitCheckout.has(h.key));
+    if (!target) return false;
+    const d = target.activity.details as HotelDetails;
+    if (compareDateKeys(date, d.checkInDate) <= 0) return false;
+    d.checkOutDate = date;
+    const time = findTimes(text)[0]?.time;
+    if (time) d.checkOutTime = time;
+    explicitCheckout.add(target.key);
+    target.warnings = target.warnings.filter((w) => !w.startsWith('No check-out'));
+    return true;
+  };
 
   // --- Bookings that span several lines (booking emails): paragraph-level pass.
   const paragraphs: number[][] = [];
@@ -405,11 +517,14 @@ export function parseTripText(text: string, ctx: ParseContext): ParsedTripText {
 
   for (const rawPara of paragraphs) {
     const para = rawPara.filter((i) => !isMetaLine(lines[i]));
-    if (para.length < 2) continue;
+    if (para.length < 2 || para.length > 12) continue;
+    // Several dated lines means a day-by-day plan, not one booking.
+    if (para.filter((i) => isDateOnlyLine(lines[i])).length > 1) continue;
     const joined = para.map((i) => lines[i]).join('  ');
-    const perLineHasBooking = para.some(
-      (i) => (findFlight(lines[i]) && findDates(lines[i]).length) || isHotelLine(lines[i]),
-    );
+    const perLineHasBooking = para.some((i) => {
+      const f = findFlight(lines[i]);
+      return (f && (f.flightNumber || findTimes(lines[i]).length) && (findDates(lines[i]).length || findTimes(lines[i]).length)) || isHotelLine(lines[i]);
+    });
     if (perLineHasBooking) continue;
     const flight = findFlight(joined);
     if (flight && (flight.flightNumber || FLIGHT_WORD_RE.test(joined))) {
@@ -431,13 +546,13 @@ export function parseTripText(text: string, ctx: ParseContext): ParsedTripText {
 
   // --- Line-by-line pass.
   lines.forEach((rawLine, index) => {
+    lineIndex = index;
     if (consumed.has(index)) return;
     const line = rawLine.trim();
     if (!line) {
       inChecklist = false;
       return;
     }
-    const bare = stripBullet(line);
 
     // Checklist items.
     const box = META_RE.checkbox.exec(line);
@@ -445,6 +560,37 @@ export function parseTripText(text: string, ctx: ParseContext): ParsedTripText {
       result.checklist.push(box[1].trim());
       return;
     }
+
+    const { hint, content } = splitEmoji(stripBullet(line));
+    const bare = content;
+    if (!bare) return;
+    if (TABLE_HEADER_RE.test(bare) || new RegExp(`^${WEEKDAY_RE}$`, 'i').test(bare)) return;
+    // Sub-headings like "Near Airport:".
+    if (/^[^:]{1,30}:$/.test(bare) && !META_RE.checklistHeader.test(bare) && !findTimes(bare).length && !findDates(bare).length) return;
+
+    if (hint === 'place') {
+      for (const place of placesIn(bare)) {
+        if (!result.places.some((p) => p.toLowerCase() === place.toLowerCase())) result.places.push(place);
+      }
+      return;
+    }
+    if (hint === 'note') {
+      result.notes.push(bare);
+      return;
+    }
+    const refLine = REF_LINE_RE.exec(bare);
+    if (refLine) {
+      const ref = refLine[1].toUpperCase();
+      const last = result.items[result.items.length - 1];
+      const d = last?.activity.details;
+      if (d && !d.bookingReference && lastAddedFromLine === index - 1 && hint !== 'flight') {
+        d.bookingReference = ref;
+      } else {
+        pendingRef = { ref, kind: hint === 'flight' ? 'flight' : hint === 'hotel' ? 'hotel' : undefined, date: currentDate };
+      }
+      return;
+    }
+    if (hint === 'hotel' && PLACEHOLDER_RE.test(bare)) return;
     const checklistHeader = META_RE.checklistHeader.exec(bare);
     if (checklistHeader && !findDates(bare).length && !findTimes(bare).length) {
       inChecklist = true;
@@ -551,27 +697,44 @@ export function parseTripText(text: string, ctx: ParseContext): ParsedTripText {
       }
     }
 
-    parseActivityLine(bare, rawLine);
+    parseActivityLine(bare, rawLine, hint);
   });
 
-  function parseActivityLine(textLine: string, source: string) {
-    const flight = findFlight(textLine);
+  function parseActivityLine(rawText: string, source: string, hint?: LineHint) {
+    if (CHECKOUT_RE.test(rawText) && applyCheckout(rawText)) return;
+
+    const flight = findFlight(rawText);
     if (flight) {
-      const item = buildFlight(textLine, flight, resolver, currentDate);
+      const item = buildFlight(rawText, flight, resolver, currentDate);
       if (item) {
         addItem({ ...item, source: source.trim() });
         return;
       }
     }
-    if (HOTEL_RE.test(textLine) && !/\bcheck[- ]?out\b/i.test(textLine)) {
-      const item = buildHotel(textLine, resolver, currentDate, false);
+    if ((HOTEL_RE.test(rawText) || hint === 'hotel') && !CHECKOUT_RE.test(rawText)) {
+      const item = buildHotel(rawText, resolver, currentDate, false);
       if (item) {
+        // The same hotel listed again on later days continues the stay.
+        const previous = lastHotel();
+        const prevDetails = previous?.activity.details as HotelDetails | undefined;
+        const sameAsPrevious =
+          prevDetails &&
+          normName(prevDetails.hotelName) === normName((item.activity.details as HotelDetails).hotelName) &&
+          !explicitCheckout.has(previous!.key);
+        if (sameAsPrevious) return;
         addItem({ ...item, source: source.trim(), dayNumber: item.date ? undefined : currentDayNumber });
         return;
       }
     }
 
-    // Generic activity.
+    // Generic activity. Bracketed opening hours are a note, not the start time.
+    let notes = '';
+    let textLine = rawText;
+    const hours = HOURS_RE.exec(textLine);
+    if (hours) {
+      notes = `Open ${hours[1].replace(/\s*[-–—~]\s*|\s+to\s+/i, '–').replace(/\s+/g, ' ')}`;
+      textLine = removeSpans(textLine, [{ index: hours.index, length: hours[0].length }]);
+    }
     const range = findRanges(textLine)[0];
     const dateHit = findDates(textLine)[0];
     const times = findTimes(textLine);
@@ -579,6 +742,23 @@ export function parseTripText(text: string, ctx: ParseContext): ParsedTripText {
     const spans = [...(range ? [range] : dateHit ? [dateHit] : []), ...times.slice(0, 2), ...(price ? [price] : [])];
     let title = tidy(removeSpans(textLine, spans).replace(/\b(?:at|from|until|till|by)\s*$/i, ''));
     title = title.replace(/^(?:at|from|-|–)\s+/i, '').replace(/\s*[-–]\s*$/, '');
+    if (/\([^)]*$/.test(title)) title = title.replace(/\s*\(\s*/, ' – ');
+    // "Airport train: one-way $12, return $20": several prices read best as a note.
+    const priceCount = (textLine.match(/(?:[A-Z]{2,3}\$|[$€£¥])\s?\d/g) ?? []).length;
+    const label = /^([^:]{2,40}):/.exec(title);
+    if (priceCount > 1 && label) {
+      notes = [tidy(textLine.slice(textLine.indexOf(':') + 1)), notes].filter(Boolean).join(' · ');
+      title = label[1].trim();
+    }
+    if (title.length > 60) {
+      // Long descriptions: keep the first phrase as the title.
+      const cut = /\s[-–—]\s|,\s|;\s|\.\s/.exec(title);
+      if (cut && cut.index >= 3) {
+        const rest = title.slice(cut.index + cut[0].length).trim();
+        title = title.slice(0, cut.index).trim();
+        notes = [rest, notes].filter(Boolean).join(' · ');
+      }
+    }
     if (!title || title.length < 2) {
       if (!range && !dateHit) result.unplaced.push(source.trim());
       return;
@@ -608,15 +788,21 @@ export function parseTripText(text: string, ctx: ParseContext): ParsedTripText {
         title: title.charAt(0).toUpperCase() + title.slice(1),
         time: times[0]?.time ?? '',
         location,
-        notes: '',
-        category: categorize(textLine),
-        ...(price ? { estimatedCost: price.amount } : {}),
+        notes,
+        category: hint === 'transport' || hint === 'flight' ? 'transport' : hint === 'food' ? 'food' : categorize(textLine),
+        ...(price && priceCount <= 1 ? { estimatedCost: price.amount } : {}),
       },
     });
   }
 
   finalize(result, ctx);
   return result;
+}
+
+function isDateOnlyLine(line: string): boolean {
+  const bare = splitEmoji(stripBullet(line.trim())).content;
+  const hit = findDates(bare)[0];
+  return Boolean(hit && hit.index === 0 && !tidy(bare.slice(hit.length)));
 }
 
 function isMetaLine(line: string): boolean {
@@ -754,7 +940,8 @@ function buildHotel(
     const named = /([A-Z][\w'’&.-]*(?:\s+[A-Z][\w'’&.-]*)*\s+(?:Hotel|Hostel|Resort|Inn|Suites?|Lodge|Apartments?)|(?:Hotel|Hostel|Resort)\s+[A-Z][\w'’&.-]*(?:\s+[A-Z][\w'’&.-]*)*)/.exec(nameSource);
     if (named) nameSource = named[1];
   }
-  const nameMatch = /\b(?:staying at|stay at|check[- ]?in(?: at)?)\s+(.+)/i.exec(nameSource);
+  nameSource = nameSource.replace(/[\s:,\-–]*\bcheck[- ]?in\b[\s:,\-–]*$/i, '');
+  const nameMatch = /\b(?:staying at|stay at|check[- ]?in(?: at)?)\s+(\S.*)/i.exec(nameSource);
   const cleaned = cleanHotelName(nameMatch ? nameMatch[1] : nameSource);
   const name = cleaned.name;
   let address = cleaned.address;
@@ -839,20 +1026,34 @@ function finalize(result: ParsedTripText, ctx: ParseContext): void {
     d.checkOutDate = out;
   });
 
+  const flights = result.items
+    .map((i) => i.activity.details)
+    .filter((d): d is FlightDetails => d?.type === 'flight');
+  const home = flights[0]?.departureAirport;
+  const homeCity = home ? AIRPORT_CITIES[home] : undefined;
+  // Where you start and finish isn't a destination.
+  result.places = result.places.filter((p) => !homeCity || p.toLowerCase() !== homeCity.toLowerCase());
+
   if (!result.destination && !ctx.startDate) {
-    const flights = result.items
-      .map((i) => i.activity.details)
-      .filter((d): d is FlightDetails => d?.type === 'flight');
-    const home = flights[0]?.departureAirport;
-    const cities = flights
-      .map((f) => f.arrivalAirport)
-      .filter((code) => code !== home)
-      .map((code) => AIRPORT_CITIES[code] ?? code);
-    const unique = cities.filter((c, i) => cities.indexOf(c) === i);
-    if (unique.length) result.destination = unique.join(', ');
+    if (result.places.length) {
+      result.destination = result.places.join(', ');
+    } else {
+      const cities = flights
+        .map((f) => f.arrivalAirport)
+        .filter((code) => code !== home)
+        .map((code) => AIRPORT_CITIES[code] ?? code);
+      const unique = cities.filter((c, i) => cities.indexOf(c) === i);
+      if (unique.length) result.destination = unique.join(', ');
+    }
   }
-  if (!result.name && !ctx.startDate) {
-    result.name = result.destination ? `${result.destination.split(',')[0]} trip` : undefined;
+  if (!result.name && !ctx.startDate && result.destination) {
+    const parts = result.destination.split(/\s*,\s*/);
+    result.name =
+      parts.length <= 1
+        ? `${parts[0]} trip`
+        : parts.length <= 3
+          ? `${parts.slice(0, -1).join(', ')} & ${parts[parts.length - 1]}`
+          : `${parts.slice(0, 3).join(', ')} & more`;
   }
   result.travelerNames = result.travelerNames.filter(
     (n, i, all) => all.findIndex((m) => m.toLowerCase() === n.toLowerCase()) === i,
