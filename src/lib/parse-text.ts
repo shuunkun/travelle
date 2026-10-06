@@ -95,8 +95,8 @@ const HOTEL_RE =
 const FLIGHT_WORD_RE = /\b(flight|flights|fly|flying|depart(?:s|ure)?|airline|boarding)\b/i;
 
 const CATEGORY_WORDS: [ActivityCategory, RegExp][] = [
-  ['food', /\b(breakfast|brunch|lunch|dinner|supper|dim sum|yum cha|restaurant|cafe|café|coffee|bar|drinks|food|eat|meal|tea|dessert|street food|hotpot|bbq|michelin|bakery)\b/i],
-  ['transport', /\b(train|rail|mtr|metro|subway|bus|coach|ferry|boat|taxi|uber|didi|transfer|drive|car hire|rental car|shuttle|tram|high[- ]speed|airport|pick ?up|cruise)\b/i],
+  ['food', /\b(breakfast|brunch|lunch|dinner|supper|dim sum|yum cha|restaurant|cafe|café|coffee|bar|drinks|food|eat|meal|tea|dessert|street food|hotpot|hot pot|bbq|michelin|bakery|ramen|sushi|izakaya|noodles?|dumplings?|pho|tapas|pizza|brewery|winery|wine|cocktails?|omakase|kaiseki|food court|hawker)\b/i],
+  ['transport', /\b(train|rail|mtr|metro|subway|bus|coach|ferry|boat|taxi|uber|didi|transfer|drive|car hire|rental car|shuttle|tram|high[- ]speed|airport|pick ?up|cruise|shinkansen|bullet train|jr|grab|lyft|scooter|bike hire)\b/i],
   ['accommodation', /\b(hotel|hostel|check[- ]?in|check[- ]?out|airbnb|resort)\b/i],
   ['activity', /\b(museum|tour|visit|hike|walk|temple|park|peak|market|beach|show|concert|gallery|disney|disneyland|zoo|aquarium|shopping|explore|sightseeing|island|tower|garden|palace|trip|cable car|spa|massage|class)\b/i],
 ];
@@ -403,13 +403,12 @@ export function parseTripText(text: string, ctx: ParseContext): ParsedTripText {
   });
   if (block.length) paragraphs.push(block);
 
-  for (const para of paragraphs) {
+  for (const rawPara of paragraphs) {
+    const para = rawPara.filter((i) => !isMetaLine(lines[i]));
     if (para.length < 2) continue;
     const joined = para.map((i) => lines[i]).join('  ');
     const perLineHasBooking = para.some(
-      (i) =>
-        (findFlight(lines[i]) && findDates(lines[i]).length) ||
-        (HOTEL_RE.test(lines[i]) && (findRanges(lines[i]).length || /\bnights?\b/i.test(lines[i]))),
+      (i) => (findFlight(lines[i]) && findDates(lines[i]).length) || isHotelLine(lines[i]),
     );
     if (perLineHasBooking) continue;
     const flight = findFlight(joined);
@@ -618,6 +617,21 @@ export function parseTripText(text: string, ctx: ParseContext): ParsedTripText {
 
   finalize(result, ctx);
   return result;
+}
+
+function isMetaLine(line: string): boolean {
+  const bare = stripBullet(line.trim());
+  return [META_RE.name, META_RE.destination, META_RE.dates, META_RE.travelers].some((re) => re.test(bare)) || /^\s*budget\b/i.test(bare);
+}
+
+/** A single line that is a whole hotel booking: names a property and gives a date. */
+function isHotelLine(line: string): boolean {
+  if (!HOTEL_RE.test(line)) return false;
+  const dates = findDates(line);
+  const ranges = findRanges(line);
+  if (!dates.length && !ranges.length) return false;
+  const rest = removeSpans(line, [...ranges, ...dates, ...findTimes(line)]);
+  return Boolean(cleanHotelName(rest).name);
 }
 
 function firstContentLine(lines: string[]): number {
