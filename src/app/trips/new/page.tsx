@@ -1,8 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, MapPin, Calendar, Users, Wallet } from 'lucide-react';
+import { ArrowLeft, MapPin, Calendar, Users, Wallet, Sparkles, PenLine } from 'lucide-react';
+import { SmartImport } from '@/components/trips/SmartImport';
 import { useApp } from '@/components/providers/AppProvider';
 import { TripForm, TripSubmitValues, useTripForm } from '@/components/trips/TripForm';
 import { Card } from '@/components/ui/Card';
@@ -23,6 +25,7 @@ function NewTripForm({ friends }: { friends: Friend[] }) {
   const { addTrip } = useApp();
   const form = useTripForm(undefined, friends);
   const { values } = form;
+  const [mode, setMode] = useState<'paste' | 'form'>('paste');
 
   const handleSubmit = (submitted: TripSubmitValues) => {
     const trip = addTrip(submitted);
@@ -39,9 +42,41 @@ function NewTripForm({ friends }: { friends: Friend[] }) {
           <ArrowLeft className="w-4 h-4 mr-1" aria-hidden="true" /> Back to trips
         </Link>
         <h1 className="text-3xl font-light text-gray-900">Plan a new trip</h1>
-        <p className="text-gray-500 mt-1">We&apos;ll create a day-by-day itinerary from your dates.</p>
+        <p className="text-gray-500 mt-1">
+          {mode === 'paste'
+            ? 'Paste notes, an itinerary or booking emails and we’ll build the trip for you.'
+            : 'We’ll create a day-by-day itinerary from your dates.'}
+        </p>
+        <div className="mt-5 inline-flex rounded-lg border border-gray-200 bg-white p-1" role="group" aria-label="How to start">
+          {(
+            [
+              { value: 'paste', label: 'Paste notes', icon: Sparkles },
+              { value: 'form', label: 'Fill in a form', icon: PenLine },
+            ] as const
+          ).map(({ value, label, icon: Icon }) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setMode(value)}
+              aria-pressed={mode === value}
+              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                mode === value ? 'bg-[#7C9A82] text-white' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <Icon className="w-4 h-4" aria-hidden="true" />
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
+      {mode === 'paste' ? (
+        <div className="max-w-3xl">
+          <Card>
+            <SmartImport mode="new" onDone={(id) => router.push(`/trips/${id}`)} />
+          </Card>
+        </div>
+      ) : (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2">
           <TripForm form={form} friends={friends} onSubmit={handleSubmit} onCancel={() => router.push('/trips')} submitLabel="Create trip" />
@@ -84,6 +119,7 @@ function NewTripForm({ friends }: { friends: Friend[] }) {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }

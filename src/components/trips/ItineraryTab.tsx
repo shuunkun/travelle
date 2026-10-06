@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { BedDouble, CalendarDays, LogOut, Plus, Receipt } from 'lucide-react';
+import { BedDouble, CalendarDays, LogOut, Plus, Receipt, Sparkles } from 'lucide-react';
+import { SmartImport } from './SmartImport';
 import { Activity, Expense, Trip } from '@/lib/types';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -70,6 +71,7 @@ const ItineraryTab: React.FC<ItineraryTabProps> = ({
   const [costTarget, setCostTarget] = useState<{ date: string; activity: Activity } | null>(null);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [linkTarget, setLinkTarget] = useState<Activity | null>(null);
+  const [pasteOpen, setPasteOpen] = useState(false);
 
   const requestedEdit = (() => {
     if (!editActivityId) return null;
@@ -147,10 +149,25 @@ const ItineraryTab: React.FC<ItineraryTabProps> = ({
           {pluralize(trip.itinerary.length, 'day')} · {pluralize(totalActivities, 'activity', 'activities')}
           {linkedCount > 0 && <> · {pluralize(linkedCount, 'linked expense')}</>}
         </p>
-        <Button size="sm" onClick={() => setLocalModal({ date: trip.itinerary[0].date })} icon={<Plus className="w-4 h-4" aria-hidden="true" />}>
-          Add activity
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" variant="ghost" onClick={() => setPasteOpen(true)} icon={<Sparkles className="w-4 h-4" aria-hidden="true" />}>
+            Paste plans
+          </Button>
+          <Button size="sm" onClick={() => setLocalModal({ date: trip.itinerary[0].date })} icon={<Plus className="w-4 h-4" aria-hidden="true" />}>
+            Add activity
+          </Button>
+        </div>
       </div>
+
+      <Modal
+        isOpen={pasteOpen}
+        onClose={() => setPasteOpen(false)}
+        title="Paste plans"
+        description="Bookings, notes or a day-by-day plan. Review what we found before adding."
+        size="lg"
+      >
+        {pasteOpen && <SmartImport mode="existing" trip={trip} onDone={() => setPasteOpen(false)} onCancel={() => setPasteOpen(false)} />}
+      </Modal>
 
       {trip.itinerary.map((day, dayIndex) => {
         const inRange = isDayInRange(trip, day.date);
