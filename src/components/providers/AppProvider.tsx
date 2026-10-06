@@ -1,11 +1,15 @@
 'use client';
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useState } from 'react';
 import { Activity, AppData, Expense, Friend, Settlement, Trip } from '@/lib/types';
 import { getSampleData, isStorageKey, loadData, saveData } from '@/lib/store';
-import { getFriendUsage } from '@/lib/selectors';
+import { ME_ID, getFriendUsage } from '@/lib/selectors';
 import * as tripHelpers from '@/lib/trip-helpers';
 import { generateId } from '@/lib/utils';
+import { getSupabase, isCloudConfigured } from '@/lib/cloud/client';
+import { CloudSync, SyncStatus } from '@/lib/cloud/sync';
+import { TripAccess, UserIdentity, defaultDisplayName } from '@/lib/cloud/mapping';
+import { deviceTripsToImport, markImported, prepareImport, readDeviceData } from '@/lib/cloud/import';
 
 // ---------------------------------------------------------------------------
 // State + reducer
@@ -17,6 +21,8 @@ interface AppState extends AppData {
 
 type Action =
   | { type: 'HYDRATE'; data: AppData }
+  | { type: 'UNLOAD' }
+  | { type: 'MERGE'; data: AppData }
   | { type: 'ADD_TRIP'; trip: Trip }
   | { type: 'UPDATE_TRIP'; id: string; updater: (trip: Trip) => Trip }
   | { type: 'DELETE_TRIP'; id: string }
@@ -36,6 +42,18 @@ function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'HYDRATE':
       return { ...action.data, hydrated: true };
+    case 'UNLOAD':
+      return EMPTY;
+    case 'MERGE': {
+      const known = new Set(state.friends.map((f) => f.id));
+      return {
+        ...state,
+        trips: [...state.trips, ...action.data.trips],
+        expenses: [...state.expenses, ...action.data.expenses],
+        settlements: [...state.settlements, ...action.data.settlements],
+        friends: [...state.friends, ...action.data.friends.filter((f) => !known.has(f.id))],
+      };
+    }
     case 'ADD_TRIP':
       return { ...state, trips: [...state.trips, action.trip] };
     case 'UPDATE_TRIP':
@@ -141,6 +159,55 @@ export interface AppContextValue extends AppData, AppActions {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
+// ---------------------------------------------------------------------------
+// Cloud (accounts + sync)
+// ---------------------------------------------------------------------------
+
+/** `local`: data lives only in this browser (signed out or cloud not configured). */
+export type CloudStatus = 'local' | SyncStatus;
+
+export interface InvitePreview {
+  tripId: string;
+  name: string;
+  destination: string;
+  startDate: string;
+  endDate: string;
+  people: Friend[];
+  claimedPersonIds: string[];
+  alreadyMember: boolean;
+}
+
+export interface CloudContextValue {
+  configured: boolean;
+  /** False until the saved session (if any) has been read. */
+  authReady: boolean;
+  user: UserIdentity | null;
+  status: CloudStatus;
+  error?: string;
+  sendMagicLink: (email: string, redirectPath?: string) => Promise<{ error?: string }>;
+  verifyCode: (email: string, code: string) => Promise<{ error?: string }>;
+  signOut: () => Promise<void>;
+  /** Sharing info for a cloud trip (undefined in local mode or before it's saved). */
+  tripAccess: (tripId: string) => TripAccess | undefined;
+  createInvite: (tripId: string) => Promise<{ code?: string; error?: string }>;
+  previewInvite: (code: string) => Promise<{ preview?: InvitePreview; error?: string }>;
+  joinTrip: (
+    code: string,
+    personId: string | null,
+    newPerson?: Omit<Friend, 'id'>,
+  ) => Promise<{ tripId?: string; error?: string }>;
+  /** Trips saved on this device (while signed out) that aren't in the account yet. */
+  deviceTrips: Trip[];
+  importDeviceTrips: (tripIds: string[]) => void;
+}
+
+const CloudContext = createContext<CloudContextValue | null>(null);
+
+function errorText(error: unknown): string {
+  if (error && typeof error === 'object' && 'message' in error) return String((error as { message: unknown }).message);
+  return 'Something went wrong';
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, EMPTY);
   // Latest state for imperative reads inside actions (kept in an effect so we
@@ -150,8 +217,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     stateRef.current = state;
   }, [state]);
 
-  // Load after mount so server and first client render are identical.
+  const supabase = getSupabase();
+  const [authReady, setAuthReady] = useState(!isCloudConfigured);
+  const [user, setUser] = useState<UserIdentity | null>(null);
+  const [syncStatus, setSyncStatus] = useState<{ status: SyncStatus; error?: string }>({ status: 'loading' });
+  const [access, setAccess] = useState<Map<string, TripAccess>>(() => new Map());
+  const [deviceTrips, setDeviceTrips] = useState<Trip[]>([]);
+  const syncRef = React.useRef<CloudSync | null>(null);
+  const userId = user?.id;
+  const userEmail = user?.email;
+
+  // Session tracking.
   useEffect(() => {
+    if (!supabase) return;
+    const apply = (session: { user: { id: string; email?: string } } | null) => {
+      setUser((prev) => {
+        const next = session ? { id: session.user.id, email: session.user.email ?? '' } : null;
+        return prev?.id === next?.id && prev?.email === next?.email ? prev : next;
+      });
+      setAuthReady(true);
+    };
+    void supabase.auth.getSession().then(({ data }) => apply(data.session));
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => apply(session));
+    return () => data.subscription.unsubscribe();
+  }, [supabase]);
+
+  // Local mode: load after mount so server and first client render are identical.
+  useEffect(() => {
+    if (!authReady || userId) return;
     dispatch({ type: 'HYDRATE', data: loadData() });
 
     // Keep multiple tabs in sync.
@@ -163,13 +256,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
-  }, []);
+  }, [authReady, userId]);
+
+  // Cloud mode: the account's data replaces the device's.
+  useEffect(() => {
+    if (!supabase || !userId) return;
+    dispatch({ type: 'UNLOAD' });
+    const sync = new CloudSync(
+      supabase,
+      { id: userId, email: userEmail ?? '' },
+      {
+        onRemoteData: (data, nextAccess) => {
+          dispatch({ type: 'HYDRATE', data });
+          setAccess(new Map(nextAccess));
+          setDeviceTrips(deviceTripsToImport());
+        },
+        onStatus: (status, error) => setSyncStatus({ status, error }),
+      },
+    );
+    syncRef.current = sync;
+    sync.start();
+    return () => {
+      sync.dispose();
+      syncRef.current = null;
+    };
+  }, [supabase, userId, userEmail]);
 
   // Persist whenever data changes (after hydration).
   useEffect(() => {
     if (!state.hydrated) return;
-    saveData(state);
-  }, [state]);
+    if (userId) syncRef.current?.notifyLocalChange(state);
+    else saveData(state);
+  }, [state, userId]);
 
   const updateTripWith = useCallback((id: string, updater: (trip: Trip) => Trip) => {
     dispatch({ type: 'UPDATE_TRIP', id, updater });
@@ -261,10 +379,94 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       },
       deleteSettlement: (id) => dispatch({ type: 'DELETE_SETTLEMENT', id }),
 
-      resetToSampleData: () => dispatch({ type: 'HYDRATE', data: getSampleData() }),
+      resetToSampleData: () => {
+        if (syncRef.current) {
+          // Never wipe an account; add fresh copies of the samples instead.
+          const sample = getSampleData();
+          const copy = prepareImport(sample, sample.trips.map((t) => t.id), stateRef.current.friends);
+          dispatch({ type: 'MERGE', data: copy });
+          return;
+        }
+        dispatch({ type: 'HYDRATE', data: getSampleData() });
+      },
     }),
     [updateTripWith],
   );
+
+  const cloud = useMemo<CloudContextValue>(() => {
+    const status: CloudStatus = userId ? syncStatus.status : 'local';
+    return {
+      configured: isCloudConfigured,
+      authReady,
+      user,
+      status,
+      error: userId ? syncStatus.error : undefined,
+      sendMagicLink: async (email, redirectPath = '/account') => {
+        if (!supabase) return { error: 'Cloud sync is not set up for this site yet.' };
+        const { error } = await supabase.auth.signInWithOtp({
+          email: email.trim(),
+          options: { emailRedirectTo: `${window.location.origin}${redirectPath}` },
+        });
+        return error ? { error: error.message } : {};
+      },
+      verifyCode: async (email, code) => {
+        if (!supabase) return { error: 'Cloud sync is not set up for this site yet.' };
+        const { error } = await supabase.auth.verifyOtp({ email: email.trim(), token: code.trim(), type: 'email' });
+        return error ? { error: error.message } : {};
+      },
+      signOut: async () => {
+        await supabase?.auth.signOut();
+      },
+      tripAccess: (tripId) => access.get(tripId) ?? syncRef.current?.getAccess(tripId),
+      createInvite: async (tripId) => {
+        if (!supabase || !userId) return { error: 'Sign in to invite people.' };
+        if (!syncRef.current?.getAccess(tripId)) return { error: 'This trip is still being saved. Try again in a moment.' };
+        const existing = await supabase.from('trip_invites').select('code').eq('trip_id', tripId).limit(1);
+        if (existing.error) return { error: existing.error.message };
+        if (existing.data?.[0]) return { code: existing.data[0].code as string };
+        const { data, error } = await supabase.from('trip_invites').insert({ trip_id: tripId }).select('code').single();
+        if (error) return { error: error.message };
+        return { code: data.code as string };
+      },
+      previewInvite: async (code) => {
+        if (!supabase) return { error: 'Cloud sync is not set up for this site yet.' };
+        const { data, error } = await supabase.rpc('invite_preview', { p_code: code });
+        if (error) return { error: error.message };
+        if (!data) return { error: 'This invite link is invalid or has been revoked.' };
+        return { preview: data as InvitePreview };
+      },
+      joinTrip: async (code, personId, newPerson) => {
+        if (!supabase) return { error: 'Cloud sync is not set up for this site yet.' };
+        try {
+          const { data, error } = await supabase.rpc('join_trip', {
+            p_code: code,
+            p_person_id: personId,
+            p_new_person: newPerson ? { id: generateId(), ...newPerson } : null,
+          });
+          if (error) return { error: error.message };
+          syncRef.current?.scheduleRefresh();
+          return { tripId: data as string };
+        } catch (error) {
+          return { error: errorText(error) };
+        }
+      },
+      deviceTrips,
+      importDeviceTrips: (tripIds) => {
+        if (!syncRef.current || tripIds.length === 0) return;
+        const device = readDeviceData();
+        const copy = prepareImport(device, tripIds, stateRef.current.friends);
+        dispatch({ type: 'MERGE', data: copy });
+        // A fresh account only knows your email; keep the name you used on this device.
+        const deviceMe = device.friends.find((f) => f.id === ME_ID);
+        const accountMe = stateRef.current.friends.find((f) => f.id === ME_ID);
+        if (deviceMe && deviceMe.name !== 'You' && accountMe?.name === defaultDisplayName(userEmail ?? '')) {
+          dispatch({ type: 'UPDATE_FRIEND', id: ME_ID, patch: { name: deviceMe.name, color: deviceMe.color } });
+        }
+        markImported(tripIds);
+        setDeviceTrips(deviceTripsToImport());
+      },
+    };
+  }, [supabase, authReady, user, userId, userEmail, syncStatus, access, deviceTrips]);
 
   const value = useMemo<AppContextValue>(
     () => ({
@@ -278,12 +480,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [state, actions],
   );
 
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+  return (
+    <CloudContext.Provider value={cloud}>
+      <AppContext.Provider value={value}>{children}</AppContext.Provider>
+    </CloudContext.Provider>
+  );
 }
 
 export function useApp(): AppContextValue {
   const ctx = useContext(AppContext);
   if (!ctx) throw new Error('useApp must be used within <AppProvider>');
+  return ctx;
+}
+
+export function useCloud(): CloudContextValue {
+  const ctx = useContext(CloudContext);
+  if (!ctx) throw new Error('useCloud must be used within <AppProvider>');
   return ctx;
 }
 

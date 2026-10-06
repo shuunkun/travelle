@@ -3,8 +3,9 @@
 import { use, useCallback, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { MapPin, Calendar, Pencil, Trash2, ArrowLeft, Compass } from 'lucide-react';
-import { useApp, useTrip } from '@/components/providers/AppProvider';
+import { MapPin, Calendar, Pencil, Trash2, ArrowLeft, Compass, Share2, LogOut } from 'lucide-react';
+import { useApp, useCloud, useTrip } from '@/components/providers/AppProvider';
+import { ShareTripModal } from '@/components/cloud/ShareTripModal';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
@@ -35,6 +36,8 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const cloud = useCloud();
   // Captured once per mount; good enough for "today" badges.
   const [today] = useState(() => todayKey());
   // Pending "show me this activity" request; ItineraryTab scrolls to it and
@@ -112,6 +115,7 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
   }
 
   const status = getTripStatus(trip.startDate, trip.endDate, today);
+  const isGuest = cloud.tripAccess(trip.id)?.isOwner === false;
 
   const handleEdit = (values: TripSubmitValues) => {
     updateTrip(trip.id, values);
@@ -145,8 +149,19 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
               <Button size="sm" variant="ghost" className="text-white hover:bg-white/15 hover:text-white" onClick={() => setEditOpen(true)}>
                 <Pencil className="w-4 h-4 mr-1.5" aria-hidden="true" /> Edit
               </Button>
+              <Button size="sm" variant="ghost" className="text-white hover:bg-white/15 hover:text-white" onClick={() => setShareOpen(true)}>
+                <Share2 className="w-4 h-4 mr-1.5" aria-hidden="true" /> Share
+              </Button>
               <Button size="sm" variant="ghost" className="text-white hover:bg-white/15 hover:text-white" onClick={() => setDeleteOpen(true)}>
-                <Trash2 className="w-4 h-4 mr-1.5" aria-hidden="true" /> Delete
+                {isGuest ? (
+                  <>
+                    <LogOut className="w-4 h-4 mr-1.5" aria-hidden="true" /> Leave
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4 mr-1.5" aria-hidden="true" /> Delete
+                  </>
+                )}
               </Button>
             </div>
           </div>
@@ -229,17 +244,26 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
         {editOpen && <EditTripForm trip={trip} friends={friends} onSubmit={handleEdit} onCancel={() => setEditOpen(false)} />}
       </Modal>
 
+      <ShareTripModal trip={trip} members={members} isOpen={shareOpen} onClose={() => setShareOpen(false)} />
+
       <ConfirmDialog
         isOpen={deleteOpen}
         onClose={() => setDeleteOpen(false)}
         onConfirm={handleDelete}
-        title="Delete trip"
-        confirmLabel="Delete trip"
+        title={isGuest ? 'Leave trip' : 'Delete trip'}
+        confirmLabel={isGuest ? 'Leave trip' : 'Delete trip'}
         message={
-          <>
-            Delete <strong>{trip.name}</strong>? Its itinerary, {pluralize(financials.expenses.length, 'expense')} and{' '}
-            {pluralize(financials.settlements.length, 'recorded payment')} will be removed permanently.
-          </>
+          isGuest ? (
+            <>
+              Leave <strong>{trip.name}</strong>? It will disappear from your account, but stays for everyone else.
+            </>
+          ) : (
+            <>
+              Delete <strong>{trip.name}</strong>? Its itinerary, {pluralize(financials.expenses.length, 'expense')} and{' '}
+              {pluralize(financials.settlements.length, 'recorded payment')} will be removed permanently
+              {cloud.tripAccess(trip.id) ? ' for everyone on the trip' : ''}.
+            </>
+          )
         }
       />
     </div>

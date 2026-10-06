@@ -2,11 +2,19 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Plane, Menu, X } from 'lucide-react'
+import { Plane, Menu, X, Cloud, CloudOff, CloudAlert, RefreshCw } from 'lucide-react'
 import { useState } from 'react'
-import { useApp } from '@/components/providers/AppProvider'
+import { useApp, useCloud } from '@/components/providers/AppProvider'
 import { Avatar } from '@/components/ui/Avatar'
 import { ME_ID } from '@/lib/selectors'
+
+const SYNC_ICON = {
+  local: { icon: CloudOff, label: 'Saved in this browser only', tone: 'text-gray-400' },
+  loading: { icon: RefreshCw, label: 'Loading…', tone: 'text-gray-400' },
+  saving: { icon: Cloud, label: 'Saving…', tone: 'text-gray-400' },
+  synced: { icon: Cloud, label: 'Synced', tone: 'text-[#7C9A82]' },
+  error: { icon: CloudAlert, label: 'Sync problem, retrying', tone: 'text-[#C47C7C]' },
+} as const
 
 const navLinks = [
   { name: 'Home', href: '/' },
@@ -18,12 +26,30 @@ export default function Navbar() {
   const pathname = usePathname()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const { friends, hydrated } = useApp()
+  const cloud = useCloud()
   const me = hydrated ? friends.find((f) => f.id === ME_ID) : undefined
 
   const isActive = (path: string) => {
     if (path === '/') return pathname === '/'
     return pathname.startsWith(path)
   }
+
+  const sync = SYNC_ICON[cloud.status]
+  const SyncIcon = sync.icon
+  const syncLink = !cloud.configured || !cloud.authReady ? null : cloud.user ? (
+    <Link
+      href="/account"
+      className={`rounded-full p-1.5 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7C9A82] ${sync.tone}`}
+      aria-label={`Account: ${sync.label}`}
+      title={sync.label}
+    >
+      <SyncIcon className={`w-5 h-5 ${cloud.status === 'saving' || cloud.status === 'loading' ? 'animate-pulse' : ''}`} aria-hidden="true" />
+    </Link>
+  ) : (
+    <Link href="/account" className="text-sm font-medium text-[#5A7A60] hover:text-[#3F5A45]">
+      Sign in
+    </Link>
+  )
 
   const avatar = me ? (
     <Avatar name={me.name} color={me.color} size="sm" />
@@ -58,13 +84,15 @@ export default function Navbar() {
                 {link.name}
               </Link>
             ))}
+            {syncLink}
             <Link href="/friends" className="ml-4 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7C9A82]" aria-label="Your profile">
               {avatar}
             </Link>
           </div>
 
           {/* Mobile toggle */}
-          <div className="md:hidden flex items-center">
+          <div className="md:hidden flex items-center gap-3">
+            {syncLink}
             <button
               type="button"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
