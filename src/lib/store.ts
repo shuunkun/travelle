@@ -130,6 +130,11 @@ function normalizeActivity(raw: unknown): Activity | null {
   return activity;
 }
 
+/** Older data had no trip currency and wrote expenses as USD. */
+function asCurrency(value: unknown): string {
+  return typeof value === 'string' && /^[A-Z]{3}$/.test(value) ? value : 'USD';
+}
+
 export function normalizeTrip(raw: unknown): Trip | null {
   if (!isRecord(raw)) return null;
   const id = asString(raw.id);
@@ -143,6 +148,7 @@ export function normalizeTrip(raw: unknown): Trip | null {
     coverImage: asString(raw.coverImage),
     description: asString(raw.description),
     travelers: asArray<unknown>(raw.travelers).filter((t): t is string => typeof t === 'string'),
+    currency: asCurrency(raw.currency),
     budget: asNumber(raw.budget),
     itinerary: asArray<unknown>(raw.itinerary)
       .filter(isRecord)
@@ -189,7 +195,10 @@ export function normalizeExpense(raw: unknown): Expense | null {
     tripId,
     description: asString(raw.description),
     amount: asNumber(raw.amount),
-    currency: asString(raw.currency, 'USD'),
+    currency: asCurrency(raw.currency),
+    ...(typeof raw.exchangeRate === 'number' && raw.exchangeRate > 0 && raw.exchangeRate !== 1
+      ? { exchangeRate: raw.exchangeRate }
+      : {}),
     paidBy: asString(raw.paidBy),
     splitBetween,
     date: asString(raw.date) || todayKey(),

@@ -10,6 +10,7 @@ import { ProgressBar } from '@/components/ui/ProgressBar';
 import { ChecklistCard } from './ChecklistCard';
 import { compareDateKeys, formatCurrency, formatSignedCurrency, getCategoryIcon, getDaysBetween, pluralize, formatDate, unlessInteractive } from '@/lib/utils';
 import { ME_ID } from '@/lib/selectors';
+import { ExpenseAmount } from '@/components/expenses/ExpenseAmount';
 import {
   LocatedActivity,
   activityActualCost,
@@ -43,10 +44,13 @@ const shortDate = (date: string) => formatDate(date, { month: 'short', day: 'num
 function BookingRow({
   entry,
   expenses,
+  currency,
   onSelect,
 }: {
   entry: LocatedActivity;
   expenses: Expense[];
+  /** Trip home currency. */
+  currency: string;
   onSelect?: (activityId: string) => void;
 }) {
   const { activity } = entry;
@@ -89,11 +93,11 @@ function BookingRow({
   const cost =
     linked ? (
       <span className={`text-sm font-medium tabular-nums ${planned !== undefined && actual > planned + 0.004 ? 'text-[#C47C7C]' : 'text-gray-900'}`}>
-        {formatCurrency(actual)}
+        {formatCurrency(actual, currency)}
       </span>
     ) : planned !== undefined ? (
       <span className="text-sm tabular-nums text-gray-500">
-        {formatCurrency(planned)} <span className="text-xs text-gray-400">planned</span>
+        {formatCurrency(planned, currency)} <span className="text-xs text-gray-400">planned</span>
       </span>
     ) : (
       <span className="text-xs text-gray-400">No cost yet</span>
@@ -173,7 +177,7 @@ const OverviewTab: React.FC<OverviewTabProps> = ({
     {
       icon: Receipt,
       label: pluralize(expenses.length, 'expense'),
-      sub: formatCurrency(spent),
+      sub: formatCurrency(spent, trip.currency),
       hint: 'go' as const,
       title: 'Open expenses',
       onClick: () => onGoTo('expenses'),
@@ -266,7 +270,7 @@ const OverviewTab: React.FC<OverviewTabProps> = ({
                         {friend.id === ME_ID && <span className="ml-1 text-xs text-gray-400">(you)</span>}
                       </p>
                       <p className={`text-xs ${net > 0.004 ? 'text-teal-600' : net < -0.004 ? 'text-[#C47C7C]' : 'text-gray-400'}`}>
-                        {net > 0.004 ? `is owed ${formatCurrency(net)}` : net < -0.004 ? `owes ${formatCurrency(-net)}` : 'settled up'}
+                        {net > 0.004 ? `is owed ${formatCurrency(net, trip.currency)}` : net < -0.004 ? `owes ${formatCurrency(-net, trip.currency)}` : 'settled up'}
                       </p>
                     </div>
                   </div>
@@ -293,6 +297,7 @@ const OverviewTab: React.FC<OverviewTabProps> = ({
                     <BookingRow
                       entry={entry}
                       expenses={expenses}
+                      currency={trip.currency}
                       onSelect={onEditActivity ?? onGoToActivity}
                     />
                   </li>
@@ -316,20 +321,20 @@ const OverviewTab: React.FC<OverviewTabProps> = ({
           {trip.budget > 0 ? (
             <>
               <div className="flex items-baseline justify-between mb-2">
-                <span className="text-2xl font-semibold text-gray-900">{formatCurrency(spent)}</span>
-                <span className="text-sm text-gray-500">of {formatCurrency(trip.budget)}</span>
+                <span className="text-2xl font-semibold text-gray-900">{formatCurrency(spent, trip.currency)}</span>
+                <span className="text-sm text-gray-500">of {formatCurrency(trip.budget, trip.currency)}</span>
               </div>
               <ProgressBar value={budgetPct} size="md" label="Budget used" className="mb-3" />
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500">{Math.round(budgetPct)}% used</span>
                 <span className={`font-medium ${remaining < 0 ? 'text-[#C47C7C]' : 'text-teal-600'}`}>
-                  {remaining < 0 ? `${formatCurrency(-remaining)} over` : `${formatCurrency(remaining)} left`}
+                  {remaining < 0 ? `${formatCurrency(-remaining, trip.currency)} over` : `${formatCurrency(remaining, trip.currency)} left`}
                 </span>
               </div>
             </>
           ) : (
             <>
-              <p className="text-2xl font-semibold text-gray-900 mb-1">{formatCurrency(spent)}</p>
+              <p className="text-2xl font-semibold text-gray-900 mb-1">{formatCurrency(spent, trip.currency)}</p>
               <p className="text-sm text-gray-500">spent so far. No budget set.</p>
             </>
           )}
@@ -338,16 +343,16 @@ const OverviewTab: React.FC<OverviewTabProps> = ({
               <div className="flex items-baseline justify-between text-sm mb-1.5">
                 <span className="text-gray-500">Planned vs actual</span>
                 <span className="font-medium tabular-nums text-gray-900">
-                  {formatCurrency(plan.actual)}
-                  <span className="text-gray-400 font-normal"> / {plan.planned > 0 ? formatCurrency(plan.planned) : '—'}</span>
+                  {formatCurrency(plan.actual, trip.currency)}
+                  <span className="text-gray-400 font-normal"> / {plan.planned > 0 ? formatCurrency(plan.planned, trip.currency) : '—'}</span>
                 </span>
               </div>
               {plan.planned > 0 && <ProgressBar value={planPct} size="sm" label="Planned spend used" className="mb-1.5" />}
               <p className={`text-xs ${overPlan ? 'text-[#C47C7C] font-medium' : 'text-gray-400'}`}>
                 {plan.planned > 0
                   ? overPlan
-                    ? `${formatCurrency(plan.actual - plan.planned)} over plan`
-                    : `${formatCurrency(plan.planned - plan.actual)} under plan`
+                    ? `${formatCurrency(plan.actual - plan.planned, trip.currency)} over plan`
+                    : `${formatCurrency(plan.planned - plan.actual, trip.currency)} under plan`
                   : 'No estimates yet'}
                 {' · '}
                 {pluralize(plan.linkedExpenses, 'linked expense')} across {pluralize(plan.costedActivities, 'activity', 'activities')}
@@ -358,7 +363,7 @@ const OverviewTab: React.FC<OverviewTabProps> = ({
             <div className="mt-4 pt-4 border-t border-gray-50 flex items-center justify-between text-sm">
               <span className="text-gray-500">Your balance</span>
               <button type="button" onClick={() => onGoTo('settle')} className={`font-medium hover:underline ${myBalance.net > 0 ? 'text-teal-600' : 'text-[#C47C7C]'}`}>
-                {formatSignedCurrency(myBalance.net)}
+                {formatSignedCurrency(myBalance.net, trip.currency)}
               </button>
             </div>
           )}
@@ -390,7 +395,7 @@ const OverviewTab: React.FC<OverviewTabProps> = ({
                         <p className="text-xs text-gray-400">{formatDate(exp.date)}</p>
                       </div>
                     </div>
-                    <span className="text-sm font-medium tabular-nums whitespace-nowrap">{formatCurrency(exp.amount, exp.currency)}</span>
+                    <ExpenseAmount expense={exp} tripCurrency={trip.currency} className="text-sm font-medium shrink-0" />
                   </button>
                 </li>
               ))}

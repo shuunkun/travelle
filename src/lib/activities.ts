@@ -12,6 +12,7 @@ import {
 } from './types';
 import { compareDateKeys, getDaysBetween, isDateKey } from './utils';
 import { isDayInRange } from './trip-helpers';
+import { homeAmountCents } from './currency';
 
 /**
  * Pure helpers for typed ("dynamic") activities — flights and hotels — plus
@@ -274,7 +275,7 @@ export function expensesForActivity(expenses: Expense[], activityId: string): Ex
 /** Sum of expenses linked to this activity (in cents to avoid float drift). */
 export function activityActualCost(expenses: Expense[], activityId: string): number {
   const cents = expensesForActivity(expenses, activityId).reduce(
-    (sum, e) => sum + Math.round(e.amount * 100),
+    (sum, e) => sum + homeAmountCents(e),
     0,
   );
   return cents / 100;
@@ -317,7 +318,7 @@ export function getPlannedVsActual(trip: Trip, expenses: Expense[]): PlannedVsAc
   let linkedExpenses = 0;
   for (const e of expenses) {
     if (e.activityId && activityIds.has(e.activityId)) {
-      actualCents += Math.round(e.amount * 100);
+      actualCents += homeAmountCents(e);
       linkedExpenses += 1;
     }
   }

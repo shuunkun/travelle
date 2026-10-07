@@ -111,7 +111,7 @@ function NewTripForm({ friends }: { friends: Friend[] }) {
                   </div>
                   <div className="flex items-center">
                     <Wallet className="w-4 h-4 mr-1.5" aria-hidden="true" />
-                    {Number.isFinite(budget) ? formatCurrency(budget) : '—'}
+                    {Number.isFinite(budget) ? formatCurrency(budget, values.currency) : '—'}
                   </div>
                 </div>
               </div>

@@ -201,6 +201,7 @@ export function localToCloud(data: AppData, user: UserIdentity, personIdFor: (tr
       description: trip.description,
       travelers: trip.travelers.map(swap),
       itinerary: trip.itinerary,
+      currency: trip.currency,
       budget: trip.budget,
       checklist: trip.checklist,
       people,

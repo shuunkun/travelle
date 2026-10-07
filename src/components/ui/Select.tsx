@@ -12,10 +12,11 @@ export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElemen
   options: SelectOption[];
   error?: string;
   placeholder?: string;
+  hint?: string;
 }
 
 const Select = forwardRef<HTMLSelectElement, SelectProps>(
-  ({ label, options, error, placeholder, className = '', id, ...props }, ref) => {
+  ({ label, options, error, placeholder, hint, className = '', id, ...props }, ref) => {
     const autoId = useId();
     const selectId = id ?? autoId;
     return (
@@ -45,9 +46,11 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
             </option>
           ))}
         </select>
-        {error && (
+        {error ? (
           <p className="mt-1 text-sm text-[#C47C7C]">{error}</p>
-        )}
+        ) : hint ? (
+          <p className="mt-1 text-xs text-gray-400">{hint}</p>
+        ) : null}
       </div>
     );
   }

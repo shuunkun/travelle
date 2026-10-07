@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/Textarea';
 import { Avatar } from '@/components/ui/Avatar';
+import { Select } from '@/components/ui/Select';
+import { CURRENCY_OPTIONS, currencySymbol, guessHomeCurrency, isKnownCurrency } from '@/lib/currency';
 import { COVER_PRESETS, DEFAULT_COVER, compareDateKeys, getCoverStyle, isDateKey, isImageUrl, pluralize } from '@/lib/utils';
 import { ME_ID } from '@/lib/selectors';
 
@@ -18,6 +20,8 @@ export interface TripFormValues {
   description: string;
   /** Raw text so the user can clear the field; parsed on submit. */
   budget: string;
+  /** Home currency for the budget, balances and settlements. */
+  currency: string;
   travelers: string[];
   coverImage: string;
 }
@@ -58,6 +62,8 @@ export function toSubmitValues(values: TripFormValues): TripSubmitValues {
 export interface TripFormState {
   values: TripFormValues;
   errors: TripFormErrors;
+  /** Currency the trip had when the form opened; undefined for new trips. */
+  initialCurrency?: string;
   update: (patch: Partial<TripFormValues>) => void;
   /** Validates; returns submit-ready values or null if invalid. */
   submit: () => TripSubmitValues | null;
@@ -72,6 +78,7 @@ export function useTripForm(initial?: Partial<Trip>, friends: Friend[] = []): Tr
     endDate: initial?.endDate ?? '',
     description: initial?.description ?? '',
     budget: initial?.budget ? String(initial.budget) : '',
+    currency: initial?.currency ?? guessHomeCurrency(),
     travelers: initial?.travelers ?? (friends.some((f) => f.id === ME_ID) ? [ME_ID] : []),
     coverImage: initial?.coverImage || DEFAULT_COVER,
   }));
@@ -89,7 +96,7 @@ export function useTripForm(initial?: Partial<Trip>, friends: Friend[] = []): Tr
     return toSubmitValues(values);
   }, [values]);
 
-  return { values, errors, update, submit };
+  return { values, errors, initialCurrency: initial?.currency, update, submit };
 }
 
 export interface TripFormProps {
@@ -103,7 +110,7 @@ export interface TripFormProps {
 }
 
 const TripForm: React.FC<TripFormProps> = ({ form, friends, submitLabel = 'Save', onSubmit, onCancel, compact = false }) => {
-  const { values, errors, update, submit } = form;
+  const { values, errors, initialCurrency, update, submit } = form;
   const coverIsUrl = isImageUrl(values.coverImage);
 
   const handleSubmit = (event: React.FormEvent) => {
@@ -156,19 +163,36 @@ const TripForm: React.FC<TripFormProps> = ({ form, friends, submitLabel = 'Save'
           required
         />
       </div>
-      <Input
-        label="Budget (optional)"
-        type="number"
-        min={0}
-        step="0.01"
-        inputMode="decimal"
-        prefix="$"
-        value={values.budget}
-        onChange={(e) => update({ budget: e.target.value })}
-        placeholder="0.00"
-        error={errors.budget}
-        hint="Shared budget for the whole group."
-      />
+      <div className="grid grid-cols-1 sm:grid-cols-[1fr_minmax(0,14rem)] gap-4">
+        <Input
+          label="Budget (optional)"
+          type="number"
+          min={0}
+          step="0.01"
+          inputMode="decimal"
+          prefix={currencySymbol(values.currency)}
+          value={values.budget}
+          onChange={(e) => update({ budget: e.target.value })}
+          placeholder="0.00"
+          error={errors.budget}
+          hint="Shared budget for the whole group."
+        />
+        <Select
+          label="Currency"
+          value={values.currency}
+          onChange={(e) => update({ currency: e.target.value })}
+          options={
+            isKnownCurrency(values.currency)
+              ? CURRENCY_OPTIONS
+              : [{ value: values.currency, label: values.currency }, ...CURRENCY_OPTIONS]
+          }
+          hint={
+            initialCurrency && values.currency !== initialCurrency
+              ? `Existing ${initialCurrency} expenses will be relabelled as ${values.currency}, not converted.`
+              : 'Expenses in other currencies are converted to this.'
+          }
+        />
+      </div>
       <Textarea
         label="Description"
         rows={3}

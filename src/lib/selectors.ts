@@ -1,6 +1,7 @@
 import { AppData, Expense, Friend, Settlement, Trip } from './types';
 import { computeBalances, pairwiseBalance, simplifyDebts, Transfer, PersonBalance } from './settlements';
-import { fromCents, toCents } from './split';
+import { fromCents } from './split';
+import { homeAmountCents, toHomeExpense } from './currency';
 
 export {
   expensesForActivity,
@@ -28,8 +29,14 @@ export function getTripSettlements(settlements: Settlement[], tripId: string): S
   return settlements.filter((s) => s.tripId === tripId);
 }
 
+/** Total spent in the trip's currency (foreign expenses converted at their saved rate). */
 export function getTripSpent(expenses: Expense[]): number {
-  return fromCents(expenses.reduce((sum, e) => sum + toCents(e.amount), 0));
+  return fromCents(expenses.reduce((sum, e) => sum + homeAmountCents(e), 0));
+}
+
+/** Expenses expressed in their trip's currency, for balance maths. */
+export function toHomeExpenses(expenses: Expense[]): Expense[] {
+  return expenses.map(toHomeExpense);
 }
 
 /** Friends who are travelers on this trip, in trip order. */
@@ -68,7 +75,7 @@ export function getTripFinancials(data: AppData, trip: Trip): TripFinancials {
   const expenses = getTripExpenses(data.expenses, trip.id);
   const settlements = getTripSettlements(data.settlements, trip.id);
   const participantIds = getTripParticipantIds(trip, expenses, settlements);
-  const balances = computeBalances(expenses, settlements, participantIds);
+  const balances = computeBalances(toHomeExpenses(expenses), settlements, participantIds);
   return {
     expenses,
     settlements,
@@ -78,14 +85,55 @@ export function getTripFinancials(data: AppData, trip: Trip): TripFinancials {
   };
 }
 
-/** Net amount `me` is owed (positive) or owes (negative) across every trip. */
-export function getOverallNetForMe(data: AppData, me: string = ME_ID): number {
-  const balance = computeBalances(data.expenses, data.settlements, [me]).find((b) => b.friendId === me);
-  return balance?.net ?? 0;
+/** Trip currency for each trip id; unknown trips fall back to USD. */
+function currencyByTrip(data: AppData): Map<string, string> {
+  return new Map(data.trips.map((t) => [t.id, t.currency]));
 }
 
-export function getBalanceWithFriend(data: AppData, friendId: string, me: string = ME_ID): number {
-  return pairwiseBalance(data.expenses, data.settlements, me, friendId);
+export interface CurrencyNet {
+  currency: string;
+  /** Positive = owed to me, negative = I owe. */
+  net: number;
+}
+
+/**
+ * Net amount `me` is owed (positive) or owes (negative) across every trip,
+ * per currency, since trips in different currencies can't be added together.
+ * Zero balances are left out.
+ */
+export function getOverallNetForMe(data: AppData, me: string = ME_ID): CurrencyNet[] {
+  const byCurrency = currencyByTrip(data);
+  const groups = new Map<string, { expenses: Expense[]; settlements: Settlement[] }>();
+  const groupFor = (tripId: string) => {
+    const currency = byCurrency.get(tripId) ?? 'USD';
+    let g = groups.get(currency);
+    if (!g) {
+      g = { expenses: [], settlements: [] };
+      groups.set(currency, g);
+    }
+    return g;
+  };
+  data.expenses.forEach((e) => groupFor(e.tripId).expenses.push(e));
+  data.settlements.forEach((s) => groupFor(s.tripId).settlements.push(s));
+  return Array.from(groups.entries())
+    .map(([currency, g]) => {
+      const balance = computeBalances(toHomeExpenses(g.expenses), g.settlements, [me]).find((b) => b.friendId === me);
+      return { currency, net: balance?.net ?? 0 };
+    })
+    .filter((x) => Math.abs(x.net) >= 0.005);
+}
+
+/** What `friendId` owes me (positive) or I owe them (negative), per currency. */
+export function getBalanceWithFriend(data: AppData, friendId: string, me: string = ME_ID): CurrencyNet[] {
+  const currencies = Array.from(new Set(data.trips.map((t) => t.currency)));
+  return currencies
+    .map((currency) => {
+      const tripIds = new Set(data.trips.filter((t) => t.currency === currency).map((t) => t.id));
+      const expenses = toHomeExpenses(data.expenses.filter((e) => tripIds.has(e.tripId)));
+      const settlements = data.settlements.filter((s) => tripIds.has(s.tripId));
+      return { currency, net: pairwiseBalance(expenses, settlements, me, friendId) };
+    })
+    .filter((x) => Math.abs(x.net) >= 0.005);
 }
 
 export interface FriendUsage {

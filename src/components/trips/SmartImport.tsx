@@ -11,6 +11,7 @@ import { ME_ID } from '@/lib/selectors';
 import { ParsedItem, ParsedTripText, parseTripText, resolveItemDate } from '@/lib/parse-text';
 import * as tripHelpers from '@/lib/trip-helpers';
 import { flightArrivalDayOffset, formatTime12, hotelNights } from '@/lib/activities';
+import { guessHomeCurrency } from '@/lib/currency';
 import {
   PRESET_COLORS,
   compareDateKeys,
@@ -105,6 +106,7 @@ export function SmartImport(props: Props) {
     setError(null);
   };
 
+  const homeCurrency = existing?.currency ?? guessHomeCurrency();
   const start = existing?.startDate ?? fields.startDate;
   const end = existing?.endDate ?? fields.endDate;
 
@@ -177,6 +179,7 @@ export function SmartImport(props: Props) {
       coverImage: coverForDestination(fields.destination),
       description: notesText,
       travelers,
+      currency: homeCurrency,
       budget: Number.isFinite(budget) && budget > 0 ? budget : 0,
       checklist: checklist.map((t) => ({ id: generateId(), text: t, done: false })),
     };
@@ -334,7 +337,7 @@ export function SmartImport(props: Props) {
                     <span className="flex-1 min-w-0">
                       <span className="flex flex-wrap items-baseline gap-x-2">
                         <span className="font-medium text-gray-900">{a.title}</span>
-                        {a.estimatedCost ? <span className="text-sm text-gray-500">{formatCurrency(a.estimatedCost)}</span> : null}
+                        {a.estimatedCost ? <span className="text-sm text-gray-500">{formatCurrency(a.estimatedCost, homeCurrency)}</span> : null}
                       </span>
                       <span className="block text-sm text-gray-500">
                         {date ? formatDate(date, { weekday: 'short', month: 'short', day: 'numeric' }) : 'Needs trip dates'}

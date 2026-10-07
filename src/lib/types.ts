@@ -29,6 +29,8 @@ export interface Trip {
   description: string;
   travelers: string[]; // friend IDs
   itinerary: ItineraryDay[];
+  /** Home currency (ISO 4217). Budget, balances and settlements are in this currency. */
+  currency: string;
   budget: number;
   checklist: ChecklistItem[];
 }
@@ -101,8 +103,14 @@ export interface Expense {
   id: string;
   tripId: string;
   description: string;
+  /** In `currency`, as actually paid. */
   amount: number;
   currency: string;
+  /**
+   * Trip-currency units per one unit of `currency`. Absent (or 1) when the
+   * expense is in the trip's own currency. See `lib/currency.ts`.
+   */
+  exchangeRate?: number;
   paidBy: string;
   splitBetween: SplitEntry[];
   date: string;

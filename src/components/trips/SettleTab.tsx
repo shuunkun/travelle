@@ -15,6 +15,7 @@ import { useApp } from '@/components/providers/AppProvider';
 import { compareDateKeys, formatCurrency, formatDate, formatSignedCurrency, isDateKey, pluralize, todayKey } from '@/lib/utils';
 import { roundMoney } from '@/lib/split';
 import { ME_ID } from '@/lib/selectors';
+import { currencySymbol } from '@/lib/currency';
 
 export interface SettleTabProps {
   trip: Trip;
@@ -45,7 +46,7 @@ const SettleTab: React.FC<SettleTabProps> = ({ trip, balances, transfers, settle
   const removeSettlement = (s: Settlement) => {
     const { undo } = deleteSettlement(s.id);
     toast.show({
-      message: `Removed ${formatCurrency(s.amount)} payment from ${nameOf(s.from)} to ${nameOf(s.to)}`,
+      message: `Removed ${formatCurrency(s.amount, trip.currency)} payment from ${nameOf(s.from)} to ${nameOf(s.to)}`,
       actionLabel: 'Undo',
       onAction: undo,
     });
@@ -120,14 +121,14 @@ const SettleTab: React.FC<SettleTabProps> = ({ trip, balances, transfers, settle
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-gray-900 truncate">{nameOf(b.friendId)}</p>
                           <p className="text-xs text-gray-400">
-                            paid {formatCurrency(b.paid)} · share {formatCurrency(b.owed)}
-                            {b.settledOut > 0 && ` · sent ${formatCurrency(b.settledOut)}`}
-                            {b.settledIn > 0 && ` · received ${formatCurrency(b.settledIn)}`}
+                            paid {formatCurrency(b.paid, trip.currency)} · share {formatCurrency(b.owed, trip.currency)}
+                            {b.settledOut > 0 && ` · sent ${formatCurrency(b.settledOut, trip.currency)}`}
+                            {b.settledIn > 0 && ` · received ${formatCurrency(b.settledIn, trip.currency)}`}
                           </p>
                         </div>
                       </div>
                       <div className={`text-sm font-semibold tabular-nums whitespace-nowrap ${positive ? 'text-teal-600' : negative ? 'text-[#C47C7C]' : 'text-gray-400'}`}>
-                        {positive || negative ? formatSignedCurrency(b.net) : 'settled'}
+                        {positive || negative ? formatSignedCurrency(b.net, trip.currency) : 'settled'}
                       </div>
                     </div>
                     <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden" aria-hidden="true">
@@ -158,7 +159,7 @@ const SettleTab: React.FC<SettleTabProps> = ({ trip, balances, transfers, settle
           ) : (
             <>
               <p className="text-xs text-gray-500 mb-4">
-                Fewest payments to clear {formatCurrency(outstanding)} in debts.
+                Fewest payments to clear {formatCurrency(outstanding, trip.currency)} in debts.
               </p>
               <ul className="space-y-3">
                 {transfers.map((t) => (
@@ -171,10 +172,10 @@ const SettleTab: React.FC<SettleTabProps> = ({ trip, balances, transfers, settle
                         {avatarOf(t.to, 'xs')}
                         <span className="font-medium text-gray-900 truncate">{nameOf(t.to)}</span>
                       </div>
-                      <span className="font-semibold text-gray-900 tabular-nums whitespace-nowrap">{formatCurrency(t.amount)}</span>
+                      <span className="font-semibold text-gray-900 tabular-nums whitespace-nowrap">{formatCurrency(t.amount, trip.currency)}</span>
                     </div>
                     <p className="text-xs text-gray-500 mt-1.5">
-                      {nameOf(t.from)} {t.from === ME_ID ? 'pay' : 'pays'} {nameOf(t.to)} {formatCurrency(t.amount)}
+                      {nameOf(t.from)} {t.from === ME_ID ? 'pay' : 'pays'} {nameOf(t.to)} {formatCurrency(t.amount, trip.currency)}
                     </p>
                     <Button size="sm" variant="outline" className="mt-3 w-full" onClick={() => openFromTransfer(t)}>
                       <CheckCircle className="w-4 h-4 mr-1.5" aria-hidden="true" /> Mark as settled
@@ -222,7 +223,7 @@ const SettleTab: React.FC<SettleTabProps> = ({ trip, balances, transfers, settle
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-gray-900 tabular-nums">{formatCurrency(s.amount)}</span>
+                  <span className="text-sm font-medium text-gray-900 tabular-nums">{formatCurrency(s.amount, trip.currency)}</span>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -272,10 +273,10 @@ const SettleTab: React.FC<SettleTabProps> = ({ trip, balances, transfers, settle
               min={0}
               step="0.01"
               inputMode="decimal"
-              prefix="$"
+              prefix={currencySymbol(trip.currency)}
               value={draft.amount}
               onChange={(e) => setDraft({ ...draft, amount: e.target.value })}
-              hint={draft.suggested !== undefined ? `Suggested: ${formatCurrency(draft.suggested)}. Enter less for a partial payment.` : undefined}
+              hint={draft.suggested !== undefined ? `Suggested: ${formatCurrency(draft.suggested, trip.currency)}. Enter less for a partial payment.` : undefined}
               required
               autoFocus
             />

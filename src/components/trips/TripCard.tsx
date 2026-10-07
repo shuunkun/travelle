@@ -58,7 +58,7 @@ const TripCard: React.FC<TripCardProps> = ({ trip, friends, spent, today }) => {
                 <div className="flex justify-between text-xs mb-1.5">
                   <span className="text-gray-500">Budget</span>
                   <span className={`font-medium ${budgetPct > 100 ? 'text-[#C47C7C]' : 'text-gray-700'}`}>
-                    {formatCurrency(spent)} / {formatCurrency(trip.budget)}
+                    {formatCurrency(spent, trip.currency)} / {formatCurrency(trip.budget, trip.currency)}
                   </span>
                 </div>
                 <ProgressBar value={budgetPct} label={`${trip.name} budget used`} />
@@ -66,7 +66,7 @@ const TripCard: React.FC<TripCardProps> = ({ trip, friends, spent, today }) => {
             ) : (
               <div className="mb-4 flex justify-between text-xs">
                 <span className="text-gray-500">Spent</span>
-                <span className="font-medium text-gray-700">{formatCurrency(spent)}</span>
+                <span className="font-medium text-gray-700">{formatCurrency(spent, trip.currency)}</span>
               </div>
             )}
 

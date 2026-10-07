@@ -17,15 +17,16 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
     const autoId = useId();
     const inputId = id ?? autoId;
     const hasAdornment = Boolean(prefix || suffix);
+    // Wider padding for multi-character adornments such as "HK$" or "AUD".
+    const prefixPad = !prefix ? 'px-3' : prefix.length <= 1 ? 'pl-7' : prefix.length === 2 ? 'pl-9' : 'pl-12';
+    const suffixPad = !suffix ? (prefix ? 'pr-3' : '') : suffix.length <= 1 ? 'pr-8' : suffix.length === 2 ? 'pr-10' : 'pr-14';
 
     const input = (
       <input
         ref={ref}
         id={inputId}
         aria-invalid={error ? true : undefined}
-        className={`block w-full rounded-lg border-gray-300 shadow-sm focus:border-[#7C9A82] focus:ring-[#7C9A82] sm:text-sm py-2 border outline-none transition-colors ${
-          prefix ? 'pl-7' : 'px-3'
-        } ${suffix ? 'pr-8' : prefix ? 'pr-3' : ''} ${
+        className={`block w-full rounded-lg border-gray-300 shadow-sm focus:border-[#7C9A82] focus:ring-[#7C9A82] sm:text-sm py-2 border outline-none transition-colors ${prefixPad} ${suffixPad} ${
           error ? 'border-[#C47C7C] focus:border-[#C47C7C] focus:ring-[#C47C7C]' : ''
         } ${className}`}
         {...props}

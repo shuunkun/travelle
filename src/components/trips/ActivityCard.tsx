@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Activity, Expense } from '@/lib/types';
 import { Button } from '@/components/ui/Button';
+import { ExpenseAmount } from '@/components/expenses/ExpenseAmount';
 import { formatCurrency, formatDate, getCategoryIcon, getCategoryLabel, pluralize, unlessInteractive } from '@/lib/utils';
 import {
   activityActualCost,
@@ -43,6 +44,8 @@ export interface ActivityCardProps {
   index: number;
   count: number;
   linkedExpenses: Expense[];
+  /** Trip home currency, for planned/actual totals. */
+  currency: string;
   highlighted?: boolean;
   onEdit: () => void;
   onDelete: () => void;
@@ -144,6 +147,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
   activity,
   index,
   count,
+  currency,
   linkedExpenses,
   highlighted = false,
   onEdit,
@@ -334,17 +338,17 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
             <dl className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs">
               <div className="flex items-baseline gap-1">
                 <dt className="text-gray-400">Planned</dt>
-                <dd className="font-medium text-gray-800 tabular-nums">{planned !== undefined ? formatCurrency(planned) : '—'}</dd>
+                <dd className="font-medium text-gray-800 tabular-nums">{planned !== undefined ? formatCurrency(planned, currency) : '—'}</dd>
               </div>
               <div className="flex items-baseline gap-1">
                 <dt className="text-gray-400">Actual</dt>
                 <dd className={`font-medium tabular-nums ${linkedExpenses.length === 0 ? 'text-gray-400' : overPlan ? 'text-[#C47C7C]' : 'text-teal-600'}`}>
-                  {linkedExpenses.length === 0 ? 'none yet' : formatCurrency(actual)}
+                  {linkedExpenses.length === 0 ? 'none yet' : formatCurrency(actual, currency)}
                 </dd>
               </div>
               {planned !== undefined && linkedExpenses.length > 0 && (
                 <div className="text-gray-400">
-                  {overPlan ? `${formatCurrency(actual - planned)} over plan` : `${formatCurrency(planned - actual)} under plan`}
+                  {overPlan ? `${formatCurrency(actual - planned, currency)} over plan` : `${formatCurrency(planned - actual, currency)} under plan`}
                 </div>
               )}
             </dl>
@@ -374,7 +378,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                 >
                   <Ticket className="w-3 h-3 text-gray-400" aria-hidden="true" />
                   <span className="truncate max-w-[12rem]">{expense.description}</span>
-                  <span className="font-medium tabular-nums">{formatCurrency(expense.amount, expense.currency)}</span>
+                  <ExpenseAmount expense={expense} tripCurrency={currency} className="font-medium" />
                 </button>
                 <button
                   type="button"

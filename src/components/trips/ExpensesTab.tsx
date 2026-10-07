@@ -12,6 +12,8 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/components/ui/Toast';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { ExpenseModal } from '@/components/expenses/ExpenseModal';
+import { ExpenseAmount } from '@/components/expenses/ExpenseAmount';
+import { homeAmount } from '@/lib/currency';
 import { useApp } from '@/components/providers/AppProvider';
 import {
   EXPENSE_CATEGORIES,
@@ -106,7 +108,7 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({
 
   const categoryTotals = useMemo(() => {
     const map = new Map<string, number>();
-    expenses.forEach((e) => map.set(e.category, (map.get(e.category) ?? 0) + e.amount));
+    expenses.forEach((e) => map.set(e.category, (map.get(e.category) ?? 0) + homeAmount(e)));
     return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
   }, [expenses]);
 
@@ -158,7 +160,7 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({
   };
 
   const renderSplit = (expense: Expense) => (
-    <div className="flex -space-x-1.5" title={expense.splitBetween.map((s) => `${personById.get(s.friendId)?.name ?? '?'}: ${formatCurrency(s.amount)}`).join('\n')}>
+    <div className="flex -space-x-1.5" title={expense.splitBetween.map((s) => `${personById.get(s.friendId)?.name ?? '?'}: ${formatCurrency(s.amount, expense.currency)}`).join('\n')}>
       {expense.splitBetween.slice(0, 5).map((s) => {
         const person = personById.get(s.friendId);
         return person ? (
@@ -180,7 +182,7 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({
         <Card className="p-5 md:col-span-2">
           <div className="flex items-baseline justify-between mb-2">
             <span className="text-sm text-gray-500">Total spent</span>
-            <span className="text-2xl font-semibold text-gray-900">{formatCurrency(total)}</span>
+            <span className="text-2xl font-semibold text-gray-900">{formatCurrency(total, trip.currency)}</span>
           </div>
           {trip.budget > 0 ? (
             <>
@@ -188,11 +190,11 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({
               <div className="flex justify-between text-xs mt-2">
                 <span className={budgetPct > 100 ? 'text-[#C47C7C] font-medium' : 'text-gray-500'}>
                   {budgetPct > 100
-                    ? `${formatCurrency(total - trip.budget)} over budget`
-                    : `${formatCurrency(trip.budget - total)} remaining`}
+                    ? `${formatCurrency(total - trip.budget, trip.currency)} over budget`
+                    : `${formatCurrency(trip.budget - total, trip.currency)} remaining`}
                 </span>
                 <span className="text-gray-500">
-                  {Math.round(budgetPct)}% of {formatCurrency(trip.budget)}
+                  {Math.round(budgetPct)}% of {formatCurrency(trip.budget, trip.currency)}
                 </span>
               </div>
             </>
@@ -212,7 +214,7 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({
                     <span className="mr-1.5" aria-hidden="true">{getCategoryIcon(cat)}</span>
                     {getCategoryLabel(cat)}
                   </span>
-                  <span className="font-medium text-gray-800 tabular-nums">{formatCurrency(amt)}</span>
+                  <span className="font-medium text-gray-800 tabular-nums">{formatCurrency(amt, trip.currency)}</span>
                 </li>
               ))}
             </ul>
@@ -297,7 +299,7 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({
           {isFiltered && (
             <div className="px-5 py-2.5 bg-gray-50 border-b border-gray-100 text-xs text-gray-600 flex justify-between">
               <span>{pluralize(filtered.length, 'expense')} shown</span>
-              <span className="font-medium">{formatCurrency(filteredTotal)}</span>
+              <span className="font-medium">{formatCurrency(filteredTotal, trip.currency)}</span>
             </div>
           )}
 
@@ -334,8 +336,8 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({
                   </td>
                   <td className="px-5 py-3.5 whitespace-nowrap">{renderPayer(expense)}</td>
                   <td className="px-5 py-3.5 whitespace-nowrap">{renderSplit(expense)}</td>
-                  <td className="px-5 py-3.5 whitespace-nowrap text-right text-sm font-medium text-gray-900 tabular-nums">
-                    {formatCurrency(expense.amount, expense.currency)}
+                  <td className="px-5 py-3.5 whitespace-nowrap text-right text-sm font-medium text-gray-900">
+                    <ExpenseAmount expense={expense} tripCurrency={trip.currency} />
                   </td>
                   <td className="px-3 py-3.5 whitespace-nowrap text-right">
                     <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
@@ -367,12 +369,12 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{expense.description}</p>
                       <p className="text-xs text-gray-400">
-                        {formatDate(expense.date)} Â· {getCategoryLabel(expense.category)}
+                        {formatDate(expense.date)} · {getCategoryLabel(expense.category)}
                       </p>
                       {renderActivityChip(expense)}
                     </div>
                   </div>
-                  <span className="text-sm font-semibold text-gray-900 tabular-nums">{formatCurrency(expense.amount, expense.currency)}</span>
+                  <ExpenseAmount expense={expense} tripCurrency={trip.currency} className="text-sm font-semibold text-gray-900 shrink-0" />
                 </div>
                 <div className="mt-3 flex items-center justify-between">
                   <div className="flex items-center gap-3">

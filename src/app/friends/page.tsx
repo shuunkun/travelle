@@ -6,7 +6,7 @@ import { Users, Plus, Pencil, Trash2, Lock } from 'lucide-react';
 import { Friend } from '@/lib/types';
 import { useApp } from '@/components/providers/AppProvider';
 import { formatCurrency, PRESET_COLORS, pluralize, unlessInteractive } from '@/lib/utils';
-import { getBalanceWithFriend, getFriendUsage, ME_ID } from '@/lib/selectors';
+import { CurrencyNet, getBalanceWithFriend, getFriendUsage, ME_ID } from '@/lib/selectors';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
@@ -40,13 +40,13 @@ export default function FriendsPage() {
   const regularFriends = friends.filter((f) => f.id !== ME_ID);
 
   const details = useMemo(() => {
-    const map = new Map<string, { trips: number; expenses: number; balance: number; referenced: boolean }>();
+    const map = new Map<string, { trips: number; expenses: number; balance: CurrencyNet[]; referenced: boolean }>();
     friends.forEach((f) => {
       const usage = getFriendUsage(data, f.id);
       map.set(f.id, {
         trips: usage.trips.length,
         expenses: usage.expenses.length,
-        balance: f.id === ME_ID ? 0 : getBalanceWithFriend(data, f.id),
+        balance: f.id === ME_ID ? [] : getBalanceWithFriend(data, f.id),
         referenced: usage.isReferenced,
       });
     });
@@ -94,10 +94,20 @@ export default function FriendsPage() {
     setDeleteError(undefined);
   };
 
-  const renderBalance = (balance: number) => {
-    if (Math.abs(balance) < 0.005) return <span className="text-gray-400 text-sm">Settled up</span>;
-    if (balance > 0) return <span className="text-[#7C9A82] text-sm font-medium">Owes you {formatCurrency(balance)}</span>;
-    return <span className="text-[#C47C7C] text-sm font-medium">You owe {formatCurrency(Math.abs(balance))}</span>;
+  // One line per currency: balances from trips in different currencies can't be summed.
+  const renderBalance = (balances: CurrencyNet[]) => {
+    if (balances.length === 0) return <span className="text-gray-400 text-sm">Settled up</span>;
+    return (
+      <div className="flex flex-col items-end gap-0.5">
+        {balances.map(({ currency, net }) =>
+          net > 0 ? (
+            <span key={currency} className="text-[#7C9A82] text-sm font-medium">Owes you {formatCurrency(net, currency)}</span>
+          ) : (
+            <span key={currency} className="text-[#C47C7C] text-sm font-medium">You owe {formatCurrency(Math.abs(net), currency)}</span>
+          ),
+        )}
+      </div>
+    );
   };
 
   const renderStats = (friendId: string) => {
@@ -205,7 +215,7 @@ export default function FriendsPage() {
 
                 <div className="flex justify-between items-end border-t border-gray-50 pt-4 mt-auto gap-3">
                   {renderStats(friend.id)}
-                  <div className="text-right">{renderBalance(d?.balance ?? 0)}</div>
+                  <div className="text-right">{renderBalance(d?.balance ?? [])}</div>
                 </div>
               </Card>
             );

@@ -13,10 +13,10 @@ import { useToast } from '@/components/ui/Toast';
 import { ExpenseModal } from '@/components/expenses/ExpenseModal';
 import { ActivityModal } from './ActivityModal';
 import { ActivityCard, ActivityMarker } from './ActivityCard';
+import { ExpenseAmount } from '@/components/expenses/ExpenseAmount';
 import { useApp } from '@/components/providers/AppProvider';
 import {
   compareDateKeys,
-  formatCurrency,
   formatDate,
   formatWeekday,
   getCategoryIcon,
@@ -293,6 +293,7 @@ const ItineraryTab: React.FC<ItineraryTabProps> = ({
                       </div>
                       <ActivityCard
                         activity={activity}
+                        currency={trip.currency}
                         index={index}
                         count={day.activities.length}
                         linkedExpenses={expensesForActivity(tripExpenses, activity.id)}
@@ -398,7 +399,7 @@ const ItineraryTab: React.FC<ItineraryTabProps> = ({
                       <span className="block text-sm font-medium text-gray-900 truncate">{expense.description}</span>
                       <span className="block text-xs text-gray-400">{formatDate(expense.date)}</span>
                     </span>
-                    <span className="text-sm font-medium tabular-nums text-gray-900">{formatCurrency(expense.amount, expense.currency)}</span>
+                    <ExpenseAmount expense={expense} tripCurrency={trip.currency} className="text-sm font-medium text-gray-900" />
                   </button>
                 </li>
               ))}

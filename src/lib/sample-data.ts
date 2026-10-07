@@ -16,6 +16,7 @@ export const sampleTrips: Trip[] = [
     coverImage: 'linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%)',
     description: 'A beautiful week in Paris exploring museums, cafes, and historical sights.',
     travelers: ['me', 'sarah', 'marco'],
+    currency: 'USD',
     budget: 3500,
     checklist: [
       { id: 'c1', text: 'Passport', done: true },
@@ -97,6 +98,7 @@ export const sampleTrips: Trip[] = [
     coverImage: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
     description: 'Amazing food and culture trip across Tokyo neighborhoods.',
     travelers: ['me', 'sarah'],
+    currency: 'USD',
     budget: 5000,
     checklist: [],
     itinerary: [
@@ -118,6 +120,7 @@ export const sampleTrips: Trip[] = [
     coverImage: 'linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%)',
     description: 'Relaxing villa stay in Ubud.',
     travelers: ['me', 'marco'],
+    currency: 'USD',
     budget: 2000,
     checklist: [],
     itinerary: [

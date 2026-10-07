@@ -110,10 +110,22 @@ export default function Dashboard() {
               <Wallet className="w-5 h-5 md:w-6 md:h-6" aria-hidden="true" />
             </div>
             <div className="min-w-0">
-              <p className="text-xs md:text-sm text-gray-500 truncate">{outstanding > 0.004 ? "You're owed" : outstanding < -0.004 ? 'You owe' : 'Balance'}</p>
-              <p className={`text-xl md:text-2xl font-semibold tabular-nums truncate ${outstanding > 0.004 ? 'text-[#6BA3A0]' : outstanding < -0.004 ? 'text-[#C47C7C]' : 'text-gray-900'}`}>
-                {Math.abs(outstanding) < 0.005 ? 'Settled' : formatSignedCurrency(outstanding)}
+              <p className="text-xs md:text-sm text-gray-500 truncate">
+                {outstanding.length === 0 ? 'Balance' : outstanding.every((o) => o.net > 0) ? "You're owed" : outstanding.every((o) => o.net < 0) ? 'You owe' : 'Balance'}
               </p>
+              {outstanding.length === 0 ? (
+                <p className="text-xl md:text-2xl font-semibold tabular-nums truncate text-gray-900">Settled</p>
+              ) : (
+                // One line per currency; trips in different currencies can't be summed.
+                outstanding.map((o, i) => (
+                  <p
+                    key={o.currency}
+                    className={`font-semibold tabular-nums truncate ${i === 0 ? 'text-xl md:text-2xl' : 'text-sm md:text-base'} ${o.net > 0 ? 'text-[#6BA3A0]' : 'text-[#C47C7C]'}`}
+                  >
+                    {formatSignedCurrency(o.net, o.currency)}
+                  </p>
+                ))
+              )}
             </div>
           </Card>
         </Link>
@@ -147,7 +159,7 @@ export default function Dashboard() {
                             {t.from === ME_ID ? `You pay ${nameOf(t.to)}` : `${nameOf(t.from)} pays you`}
                           </span>
                           <span className={`ml-auto font-medium tabular-nums ${t.from === ME_ID ? 'text-[#C47C7C]' : 'text-teal-600'}`}>
-                            {formatCurrency(t.amount)}
+                            {formatCurrency(t.amount, trip.currency)}
                           </span>
                         </li>
                       )

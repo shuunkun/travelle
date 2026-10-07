@@ -354,11 +354,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return trip;
       },
       updateTrip: (id, patch) => {
+        const before = stateRef.current.trips.find((t) => t.id === id);
         updateTripWith(id, (trip) => {
           const next = { ...trip, ...patch };
           const datesChanged = patch.startDate !== undefined || patch.endDate !== undefined;
           return datesChanged ? tripHelpers.syncItineraryToRange(next) : next;
         });
+        // Changing the home currency relabels (not converts) expenses that were
+        // recorded in it, so "$40" stays "40" in the new currency. Expenses in
+        // other currencies keep their own amounts and saved rates.
+        if (before && patch.currency && patch.currency !== before.currency) {
+          stateRef.current.expenses
+            .filter((e) => e.tripId === id && e.currency === before.currency && !e.exchangeRate)
+            .forEach((e) => dispatch({ type: 'UPDATE_EXPENSE', id: e.id, patch: { currency: patch.currency } }));
+        }
       },
       deleteTrip: (id) => dispatch({ type: 'DELETE_TRIP', id }),
 

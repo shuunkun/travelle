@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Expense, ExpenseCategory, Friend, SplitMode, Trip } from '@/lib/types';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
@@ -10,6 +10,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { computeSplit, roundMoney, validateSplit } from '@/lib/split';
 import { EXPENSE_CATEGORIES, formatCurrency, formatDate, isDateKey, todayKey } from '@/lib/utils';
 import { activityOptionLabel, listActivities } from '@/lib/activities';
+import { CURRENCY_OPTIONS, currencySymbol, fetchRate, formatRate, homeAmount, isKnownCurrency } from '@/lib/currency';
 
 export interface ExpenseModalProps {
   isOpen: boolean;
@@ -47,7 +48,7 @@ const ExpenseModal: React.FC<ExpenseModalProps> = (props) => {
   );
 };
 
-type FieldErrors = Partial<Record<'description' | 'amount' | 'date' | 'paidBy' | 'split', string>>;
+type FieldErrors = Partial<Record<'description' | 'amount' | 'rate' | 'date' | 'paidBy' | 'split', string>>;
 
 const ExpenseForm: React.FC<ExpenseModalProps> = ({ onClose, trip, members, expense, defaults, onSave }) => {
   // People list: trip members plus anyone referenced by the expense being
@@ -68,6 +69,55 @@ const ExpenseForm: React.FC<ExpenseModalProps> = ({ onClose, trip, members, expe
   const [amount, setAmount] = useState(
     expense ? String(expense.amount) : seed?.amount !== undefined ? String(seed.amount) : '',
   );
+  const [currency, setCurrency] = useState(expense?.currency ?? trip.currency);
+  // Trip-currency units per 1 unit of `currency`. Only meaningful when they differ.
+  const [rate, setRate] = useState(expense?.exchangeRate ? String(expense.exchangeRate) : '');
+  const [rateSource, setRateSource] = useState<'saved' | 'live' | 'manual' | 'loading' | 'unavailable'>(
+    expense?.exchangeRate ? 'saved' : 'manual',
+  );
+  const foreign = currency !== trip.currency;
+  const rateNum = Number(rate);
+  const rateValid = Number.isFinite(rateNum) && rateNum > 0;
+
+  const loadLiveRate = useCallback(
+    async (from: string) => {
+      setRateSource('loading');
+      const live = await fetchRate(from, trip.currency);
+      if (live === undefined) {
+        setRateSource('unavailable');
+        return false;
+      }
+      setRate(formatRate(live));
+      setRateSource('live');
+      return true;
+    },
+    [trip.currency],
+  );
+
+  // Fetch a live rate whenever the user picks a foreign currency without a saved rate.
+  useEffect(() => {
+    if (!foreign) return;
+    if (currency === expense?.currency && expense?.exchangeRate) return;
+    let cancelled = false;
+    (async () => {
+      setRateSource('loading');
+      const live = await fetchRate(currency, trip.currency);
+      if (cancelled) return;
+      if (live === undefined) {
+        setRate('');
+        setRateSource('unavailable');
+      } else {
+        setRate(formatRate(live));
+        setRateSource('live');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Only re-run when the chosen currency changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currency, foreign]);
+
   const [date, setDate] = useState(expense?.date ?? seed?.date ?? todayKey());
   const [paidBy, setPaidBy] = useState(expense?.paidBy ?? people[0]?.id ?? '');
   const [category, setCategory] = useState<ExpenseCategory>(expense?.category ?? seed?.category ?? 'other');
@@ -153,6 +203,7 @@ const ExpenseForm: React.FC<ExpenseModalProps> = ({ onClose, trip, members, expe
     const next: FieldErrors = {};
     if (!description.trim()) next.description = 'What was this for?';
     if (!Number.isFinite(total) || total <= 0) next.amount = 'Enter an amount greater than zero.';
+    if (foreign && !rateValid) next.rate = `Enter how much 1 ${currency} is worth in ${trip.currency}.`;
     if (!date || !isDateKey(date)) next.date = 'Pick a valid date.';
     if (!paidBy) next.paidBy = 'Who paid?';
     if (!next.amount && !splitValidation.valid) next.split = splitValidation.message;
@@ -176,7 +227,8 @@ const ExpenseForm: React.FC<ExpenseModalProps> = ({ onClose, trip, members, expe
       tripId: trip.id,
       description: description.trim(),
       amount: roundMoney(total),
-      currency: expense?.currency ?? 'USD',
+      currency,
+      exchangeRate: foreign ? rateNum : undefined,
       paidBy,
       splitBetween,
       date,
@@ -191,7 +243,15 @@ const ExpenseForm: React.FC<ExpenseModalProps> = ({ onClose, trip, members, expe
   const liveErrors = attempted ? validate() : errors;
   const currentMode = SPLIT_MODES.find((m) => m.value === mode)!;
   const inputSuffix = mode === 'percent' ? '%' : mode === 'shares' ? 'sh' : undefined;
-  const inputPrefix = mode === 'exact' ? '$' : undefined;
+  const symbol = currencySymbol(currency);
+  const inputPrefix = mode === 'exact' ? symbol : undefined;
+  const homeTotal =
+    foreign && rateValid && Number.isFinite(total) && total > 0
+      ? homeAmount({ amount: total, currency, exchangeRate: rateNum, splitBetween: preview })
+      : undefined;
+  const currencyOptions = isKnownCurrency(currency)
+    ? CURRENCY_OPTIONS
+    : [{ value: currency, label: currency }, ...CURRENCY_OPTIONS];
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-5">
@@ -203,29 +263,81 @@ const ExpenseForm: React.FC<ExpenseModalProps> = ({ onClose, trip, members, expe
         error={liveErrors.description}
         required
       />
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-[1fr_minmax(0,7.5rem)] sm:grid-cols-[1fr_minmax(0,8rem)_1fr] gap-4">
         <Input
           label="Amount"
           type="number"
           min={0}
           step="0.01"
           inputMode="decimal"
-          prefix="$"
+          prefix={symbol}
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           placeholder="0.00"
           error={liveErrors.amount}
           required
         />
-        <Input
-          label="Date"
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          error={liveErrors.date}
-          required
+        <Select
+          label="Currency"
+          value={currency}
+          onChange={(e) => setCurrency(e.target.value)}
+          options={currencyOptions}
+          aria-label="Currency paid in"
         />
+        <div className="max-sm:col-span-2">
+          <Input
+            label="Date"
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            error={liveErrors.date}
+            required
+          />
+        </div>
       </div>
+      {foreign && (
+        <div className="rounded-lg bg-gray-50 border border-gray-100 p-3 grid grid-cols-1 sm:grid-cols-[minmax(0,14rem)_1fr] gap-3 items-start">
+          <Input
+            label={`Rate · 1 ${currency} =`}
+            type="number"
+            min={0}
+            step="any"
+            inputMode="decimal"
+            suffix={trip.currency}
+            value={rate}
+            onChange={(e) => {
+              setRate(e.target.value);
+              setRateSource('manual');
+            }}
+            placeholder={rateSource === 'loading' ? 'Fetching…' : '0.00'}
+            error={liveErrors.rate}
+            required
+          />
+          <div className="text-xs text-gray-500 sm:pt-7 space-y-1">
+            <p className="text-sm font-medium text-gray-800 tabular-nums">
+              {homeTotal !== undefined ? `≈ ${formatCurrency(homeTotal, trip.currency)}` : `Converted to ${trip.currency} for balances`}
+            </p>
+            <p className="flex flex-wrap items-center gap-x-2">
+              <span>
+                {rateSource === 'loading'
+                  ? 'Fetching today’s rate…'
+                  : rateSource === 'live'
+                    ? 'Today’s market rate.'
+                    : rateSource === 'saved'
+                      ? 'Rate saved with this expense.'
+                      : rateSource === 'unavailable'
+                        ? 'Couldn’t fetch a rate (offline?). Enter it from your card statement.'
+                        : 'Custom rate.'}
+              </span>
+              {rateSource !== 'loading' && (
+                <button type="button" onClick={() => void loadLiveRate(currency)} className="text-[#7C9A82] hover:underline">
+                  Use today’s rate
+                </button>
+              )}
+            </p>
+          </div>
+        </div>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Select
           label="Paid by"
@@ -320,7 +432,7 @@ const ExpenseForm: React.FC<ExpenseModalProps> = ({ onClose, trip, members, expe
                     </div>
                   )}
                   <span className={`w-20 text-right text-sm tabular-nums ${included ? 'font-medium text-gray-900' : 'text-gray-300'}`}>
-                    {included && share ? formatCurrency(share.amount) : '—'}
+                    {included && share ? formatCurrency(share.amount, currency) : '—'}
                   </span>
                 </li>
               );
@@ -332,7 +444,7 @@ const ExpenseForm: React.FC<ExpenseModalProps> = ({ onClose, trip, members, expe
           <span className={liveErrors.split ? 'text-[#C47C7C]' : 'text-gray-400'}>
             {liveErrors.split ??
               (participants.length > 0
-                ? `${participants.length} of ${people.length} people · split totals ${formatCurrency(previewTotal)}`
+                ? `${participants.length} of ${people.length} people · split totals ${formatCurrency(previewTotal, currency)}`
                 : 'Select at least one person')}
           </span>
         </div>
