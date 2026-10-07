@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { useToast } from '@/components/ui/Toast';
 import { ExpenseModal } from '@/components/expenses/ExpenseModal';
 import { ActivityModal } from './ActivityModal';
 import { ActivityCard, ActivityMarker } from './ActivityCard';
@@ -66,8 +66,8 @@ const ItineraryTab: React.FC<ItineraryTabProps> = ({
     linkExpenseToActivity,
   } = useApp();
 
+  const toast = useToast();
   const [localModal, setLocalModal] = useState<{ date: string; activity?: Activity } | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<{ date: string; activity: Activity } | null>(null);
   const [costTarget, setCostTarget] = useState<{ date: string; activity: Activity } | null>(null);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [linkTarget, setLinkTarget] = useState<Activity | null>(null);
@@ -150,6 +150,16 @@ const ItineraryTab: React.FC<ItineraryTabProps> = ({
   };
 
   const openAddCost = (date: string, activity: Activity) => setCostTarget({ date, activity });
+
+  const removeActivity = (date: string, activity: Activity) => {
+    const linked = expensesForActivity(tripExpenses, activity.id).length;
+    const { undo } = deleteActivity(trip.id, date, activity.id);
+    toast.show({
+      message: `Deleted “${activity.title}”${linked ? ` · ${pluralize(linked, 'expense')} kept, unlinked` : ''}`,
+      actionLabel: 'Undo',
+      onAction: undo,
+    });
+  };
 
   const handleAddCost = (input: Omit<Expense, 'id'>) => {
     addExpense(input);
@@ -288,7 +298,7 @@ const ItineraryTab: React.FC<ItineraryTabProps> = ({
                         linkedExpenses={expensesForActivity(tripExpenses, activity.id)}
                         highlighted={activeHighlightId === activity.id}
                         onEdit={() => setLocalModal({ date: day.date, activity })}
-                        onDelete={() => setPendingDelete({ date: day.date, activity })}
+                        onDelete={() => removeActivity(day.date, activity)}
                         onMove={(direction) => moveActivity(trip.id, day.date, activity.id, direction)}
                         onAddCost={() => openAddCost(day.date, activity)}
                         onLinkExpense={() => setLinkTarget(activity)}
@@ -396,31 +406,6 @@ const ItineraryTab: React.FC<ItineraryTabProps> = ({
         )}
       </Modal>
 
-      <ConfirmDialog
-        isOpen={pendingDelete !== null}
-        onClose={() => setPendingDelete(null)}
-        onConfirm={() => {
-          if (pendingDelete) deleteActivity(trip.id, pendingDelete.date, pendingDelete.activity.id);
-          setPendingDelete(null);
-        }}
-        title="Delete activity"
-        confirmLabel="Delete"
-        message={(() => {
-          if (!pendingDelete) return null;
-          const linked = expensesForActivity(tripExpenses, pendingDelete.activity.id);
-          return (
-            <>
-              Remove <strong>{pendingDelete.activity.title}</strong> from {formatDate(pendingDelete.date)}?
-              {linked.length > 0 && (
-                <>
-                  {' '}
-                  {pluralize(linked.length, 'linked expense')} will be kept but unlinked.
-                </>
-              )}
-            </>
-          );
-        })()}
-      />
     </div>
   );
 };

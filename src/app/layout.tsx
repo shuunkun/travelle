@@ -3,6 +3,7 @@ import "./globals.css";
 import Navbar from "@/components/layout/Navbar";
 import { AppProvider } from "@/components/providers/AppProvider";
 import { CloudBanner } from "@/components/cloud/CloudBanner";
+import { ToastProvider } from "@/components/ui/Toast";
 
 export const metadata: Metadata = {
   title: "Travellé | Trip Planner & Expense Splitter",
@@ -18,11 +19,13 @@ export default function RootLayout({
     <html lang="en">
       <body className="antialiased min-h-screen bg-[#fafafa]">
         <AppProvider>
-          <Navbar />
-          <main className="pt-16 min-h-screen">
-            <CloudBanner />
-            {children}
-          </main>
+          <ToastProvider>
+            <Navbar />
+            <main className="pt-16 min-h-screen">
+              <CloudBanner />
+              {children}
+            </main>
+          </ToastProvider>
         </AppProvider>
       </body>
     </html>

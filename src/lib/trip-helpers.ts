@@ -76,6 +76,16 @@ export function updateActivity(
   }));
 }
 
+/** Put an activity back exactly where it was (used by undo). */
+export function insertActivityAt(trip: Trip, date: string, activity: Activity, index: number): Trip {
+  return updateDay(trip, date, (day) => {
+    if (day.activities.some((a) => a.id === activity.id)) return day;
+    const activities = [...day.activities];
+    activities.splice(Math.min(Math.max(index, 0), activities.length), 0, activity);
+    return { ...day, activities };
+  });
+}
+
 export function removeActivity(trip: Trip, date: string, activityId: string): Trip {
   return updateDay(trip, date, (day) => ({
     ...day,
@@ -133,6 +143,13 @@ export function renameChecklistItem(trip: Trip, itemId: string, text: string): T
     ...trip,
     checklist: (trip.checklist ?? []).map((item) => (item.id === itemId ? { ...item, text: trimmed } : item)),
   };
+}
+
+export function insertChecklistItemAt(trip: Trip, item: ChecklistItem, index: number): Trip {
+  const checklist = [...(trip.checklist ?? [])];
+  if (checklist.some((i) => i.id === item.id)) return trip;
+  checklist.splice(Math.min(Math.max(index, 0), checklist.length), 0, item);
+  return { ...trip, checklist };
 }
 
 export function removeChecklistItem(trip: Trip, itemId: string): Trip {

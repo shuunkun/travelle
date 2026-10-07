@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { useApp } from '@/components/providers/AppProvider';
+import { useToast } from '@/components/ui/Toast';
 
 export interface ChecklistCardProps {
   trip: Trip;
@@ -15,6 +16,7 @@ export interface ChecklistCardProps {
 /** Packing / to-do list for a trip. Click an item to rename it. */
 const ChecklistCard: React.FC<ChecklistCardProps> = ({ trip }) => {
   const { addChecklistItem, toggleChecklistItem, renameChecklistItem, deleteChecklistItem, clearCompletedChecklist } = useApp();
+  const toast = useToast();
   const [text, setText] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -99,7 +101,10 @@ const ChecklistCard: React.FC<ChecklistCardProps> = ({ trip }) => {
               )}
               <button
                 type="button"
-                onClick={() => deleteChecklistItem(trip.id, item.id)}
+                onClick={() => {
+                  const { undo } = deleteChecklistItem(trip.id, item.id);
+                  toast.show({ message: `Removed “${item.text}”`, actionLabel: 'Undo', onAction: undo });
+                }}
                 className="text-gray-300 hover:text-red-500 opacity-60 sm:opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity rounded"
                 aria-label={`Remove ${item.text}`}
               >

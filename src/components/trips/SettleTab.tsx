@@ -10,7 +10,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { useToast } from '@/components/ui/Toast';
 import { useApp } from '@/components/providers/AppProvider';
 import { compareDateKeys, formatCurrency, formatDate, formatSignedCurrency, isDateKey, pluralize, todayKey } from '@/lib/utils';
 import { roundMoney } from '@/lib/split';
@@ -38,10 +38,18 @@ const SettleTab: React.FC<SettleTabProps> = ({ trip, balances, transfers, settle
   const { addSettlement, deleteSettlement } = useApp();
   const [draft, setDraft] = useState<PaymentDraft | null>(null);
   const [draftError, setDraftError] = useState<string | undefined>();
-  const [pendingDelete, setPendingDelete] = useState<Settlement | null>(null);
+  const toast = useToast();
 
   const personById = useMemo(() => new Map(people.map((p) => [p.id, p])), [people]);
   const nameOf = (id: string) => personById.get(id)?.name ?? 'Former traveler';
+  const removeSettlement = (s: Settlement) => {
+    const { undo } = deleteSettlement(s.id);
+    toast.show({
+      message: `Removed ${formatCurrency(s.amount)} payment from ${nameOf(s.from)} to ${nameOf(s.to)}`,
+      actionLabel: 'Undo',
+      onAction: undo,
+    });
+  };
   const avatarOf = (id: string, size: 'xs' | 'sm' | 'md' = 'sm') => {
     const p = personById.get(id);
     return <Avatar name={p?.name ?? '?'} color={p?.color ?? '#9ca3af'} size={size} />;
@@ -219,7 +227,7 @@ const SettleTab: React.FC<SettleTabProps> = ({ trip, balances, transfers, settle
                     variant="ghost"
                     size="sm"
                     className="h-8 w-8 p-0 text-gray-400 hover:text-red-500"
-                    onClick={() => setPendingDelete(s)}
+                    onClick={() => removeSettlement(s)}
                     aria-label={`Undo payment from ${nameOf(s.from)} to ${nameOf(s.to)}`}
                   >
                     <Trash2 size={15} aria-hidden="true" />
@@ -284,24 +292,6 @@ const SettleTab: React.FC<SettleTabProps> = ({ trip, balances, transfers, settle
         )}
       </Modal>
 
-      <ConfirmDialog
-        isOpen={pendingDelete !== null}
-        onClose={() => setPendingDelete(null)}
-        onConfirm={() => {
-          if (pendingDelete) deleteSettlement(pendingDelete.id);
-          setPendingDelete(null);
-        }}
-        title="Undo payment"
-        confirmLabel="Undo"
-        message={
-          pendingDelete ? (
-            <>
-              Remove the {formatCurrency(pendingDelete.amount)} payment from <strong>{nameOf(pendingDelete.from)}</strong> to{' '}
-              <strong>{nameOf(pendingDelete.to)}</strong>? Their balances will go back to what they were.
-            </>
-          ) : null
-        }
-      />
     </div>
   );
 };

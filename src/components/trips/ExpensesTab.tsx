@@ -9,7 +9,7 @@ import { Select } from '@/components/ui/Select';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { useToast } from '@/components/ui/Toast';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { ExpenseModal } from '@/components/expenses/ExpenseModal';
 import { useApp } from '@/components/providers/AppProvider';
@@ -59,7 +59,15 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({
   const { addExpense, updateExpense, deleteExpense } = useApp();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Expense | undefined>(undefined);
-  const [pendingDelete, setPendingDelete] = useState<Expense | null>(null);
+  const toast = useToast();
+  const removeExpense = (expense: Expense) => {
+    const { undo } = deleteExpense(expense.id);
+    toast.show({
+      message: `Deleted “${expense.description}” (${formatCurrency(expense.amount, expense.currency)})`,
+      actionLabel: 'Undo',
+      onAction: undo,
+    });
+  };
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [personFilter, setPersonFilter] = useState('all');
   const [linkFilter, setLinkFilter] = useState<LinkFilter>('all');
@@ -334,7 +342,7 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({
                       <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => openEdit(expense)} aria-label={`Edit ${expense.description}`}>
                         <Pencil size={15} aria-hidden="true" />
                       </Button>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:text-red-500" onClick={() => setPendingDelete(expense)} aria-label={`Delete ${expense.description}`}>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:text-red-500" onClick={() => removeExpense(expense)} aria-label={`Delete ${expense.description}`}>
                         <Trash2 size={15} aria-hidden="true" />
                       </Button>
                     </div>
@@ -359,7 +367,7 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{expense.description}</p>
                       <p className="text-xs text-gray-400">
-                        {formatDate(expense.date)} · {getCategoryLabel(expense.category)}
+                        {formatDate(expense.date)} Â· {getCategoryLabel(expense.category)}
                       </p>
                       {renderActivityChip(expense)}
                     </div>
@@ -376,7 +384,7 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({
                     <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => openEdit(expense)} aria-label={`Edit ${expense.description}`}>
                       <Pencil size={15} aria-hidden="true" />
                     </Button>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:text-red-500" onClick={() => setPendingDelete(expense)} aria-label={`Delete ${expense.description}`}>
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:text-red-500" onClick={() => removeExpense(expense)} aria-label={`Delete ${expense.description}`}>
                       <Trash2 size={15} aria-hidden="true" />
                     </Button>
                   </div>
@@ -399,22 +407,6 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({
         }}
       />
 
-      <ConfirmDialog
-        isOpen={pendingDelete !== null}
-        onClose={() => setPendingDelete(null)}
-        onConfirm={() => {
-          if (pendingDelete) deleteExpense(pendingDelete.id);
-          setPendingDelete(null);
-        }}
-        title="Delete expense"
-        confirmLabel="Delete"
-        message={
-          <>
-            Delete <strong>{pendingDelete?.description}</strong> ({pendingDelete ? formatCurrency(pendingDelete.amount) : ''})?
-            Balances will be recalculated. This can&apos;t be undone.
-          </>
-        }
-      />
     </div>
   );
 };

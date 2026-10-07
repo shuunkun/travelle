@@ -27,6 +27,7 @@ type Action =
   | { type: 'UPDATE_TRIP'; id: string; updater: (trip: Trip) => Trip }
   | { type: 'DELETE_TRIP'; id: string }
   | { type: 'DELETE_ACTIVITY'; tripId: string; date: string; activityId: string }
+  | { type: 'RESTORE_ACTIVITY'; tripId: string; date: string; activity: Activity; index: number; expenseIds: string[] }
   | { type: 'ADD_EXPENSE'; expense: Expense }
   | { type: 'UPDATE_EXPENSE'; id: string; patch: Partial<Omit<Expense, 'id'>> }
   | { type: 'DELETE_EXPENSE'; id: string }
@@ -79,7 +80,18 @@ function reducer(state: AppState, action: Action): AppState {
           return rest;
         }),
       };
+    case 'RESTORE_ACTIVITY': {
+      const relink = new Set(action.expenseIds);
+      return {
+        ...state,
+        trips: state.trips.map((t) =>
+          t.id === action.tripId ? tripHelpers.insertActivityAt(t, action.date, action.activity, action.index) : t,
+        ),
+        expenses: state.expenses.map((e) => (relink.has(e.id) ? { ...e, activityId: action.activity.id } : e)),
+      };
+    }
     case 'ADD_EXPENSE':
+      if (state.expenses.some((e) => e.id === action.expense.id)) return state;
       return { ...state, expenses: [...state.expenses, action.expense] };
     case 'UPDATE_EXPENSE':
       return {
@@ -98,6 +110,7 @@ function reducer(state: AppState, action: Action): AppState {
     case 'DELETE_FRIEND':
       return { ...state, friends: state.friends.filter((f) => f.id !== action.id) };
     case 'ADD_SETTLEMENT':
+      if (state.settlements.some((s) => s.id === action.settlement.id)) return state;
       return { ...state, settlements: [...state.settlements, action.settlement] };
     case 'DELETE_SETTLEMENT':
       return { ...state, settlements: state.settlements.filter((s) => s.id !== action.id) };
@@ -118,6 +131,13 @@ export interface DeleteFriendResult {
   reason?: string;
 }
 
+/** Returned by deletes that can be undone; `undo` puts the item back where it was. */
+export interface Undoable {
+  undo: () => void;
+}
+
+const NOOP_UNDO: Undoable = { undo: () => {} };
+
 export interface AppActions {
   addTrip: (input: NewTripInput) => Trip;
   updateTrip: (id: string, patch: Partial<Omit<Trip, 'id'>>) => void;
@@ -125,19 +145,19 @@ export interface AppActions {
 
   addActivity: (tripId: string, date: string, input: Omit<Activity, 'id'>) => void;
   updateActivity: (tripId: string, date: string, activityId: string, patch: Partial<Omit<Activity, 'id'>>) => void;
-  deleteActivity: (tripId: string, date: string, activityId: string) => void;
+  deleteActivity: (tripId: string, date: string, activityId: string) => Undoable;
   moveActivity: (tripId: string, date: string, activityId: string, direction: -1 | 1) => void;
   moveActivityToDay: (tripId: string, fromDate: string, toDate: string, activityId: string) => void;
 
   addChecklistItem: (tripId: string, text: string) => void;
   toggleChecklistItem: (tripId: string, itemId: string) => void;
   renameChecklistItem: (tripId: string, itemId: string, text: string) => void;
-  deleteChecklistItem: (tripId: string, itemId: string) => void;
+  deleteChecklistItem: (tripId: string, itemId: string) => Undoable;
   clearCompletedChecklist: (tripId: string) => void;
 
   addExpense: (input: Omit<Expense, 'id'>) => Expense;
   updateExpense: (id: string, patch: Partial<Omit<Expense, 'id'>>) => void;
-  deleteExpense: (id: string) => void;
+  deleteExpense: (id: string) => Undoable;
   /** Link an expense to an itinerary activity, or pass `undefined` to unlink. */
   linkExpenseToActivity: (expenseId: string, activityId: string | undefined) => void;
 
@@ -147,7 +167,7 @@ export interface AppActions {
   deleteFriend: (id: string) => DeleteFriendResult;
 
   addSettlement: (input: Omit<Settlement, 'id'>) => Settlement;
-  deleteSettlement: (id: string) => void;
+  deleteSettlement: (id: string) => Undoable;
 
   resetToSampleData: () => void;
 }
@@ -346,8 +366,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updateTripWith(tripId, (trip) => tripHelpers.addActivity(trip, date, input)),
       updateActivity: (tripId, date, activityId, patch) =>
         updateTripWith(tripId, (trip) => tripHelpers.updateActivity(trip, date, activityId, patch)),
-      deleteActivity: (tripId, date, activityId) =>
-        dispatch({ type: 'DELETE_ACTIVITY', tripId, date, activityId }),
+      deleteActivity: (tripId, date, activityId) => {
+        const trip = stateRef.current.trips.find((t) => t.id === tripId);
+        const day = trip?.itinerary.find((d) => d.date === date);
+        const index = day?.activities.findIndex((a) => a.id === activityId) ?? -1;
+        const activity = index >= 0 ? day!.activities[index] : undefined;
+        const expenseIds = stateRef.current.expenses.filter((e) => e.activityId === activityId).map((e) => e.id);
+        dispatch({ type: 'DELETE_ACTIVITY', tripId, date, activityId });
+        if (!activity) return NOOP_UNDO;
+        return { undo: () => dispatch({ type: 'RESTORE_ACTIVITY', tripId, date, activity, index, expenseIds }) };
+      },
       moveActivity: (tripId, date, activityId, direction) =>
         updateTripWith(tripId, (trip) => tripHelpers.moveActivity(trip, date, activityId, direction)),
       moveActivityToDay: (tripId, fromDate, toDate, activityId) =>
@@ -361,8 +389,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updateTripWith(tripId, (trip) => tripHelpers.toggleChecklistItem(trip, itemId)),
       renameChecklistItem: (tripId, itemId, text) =>
         updateTripWith(tripId, (trip) => tripHelpers.renameChecklistItem(trip, itemId, text)),
-      deleteChecklistItem: (tripId, itemId) =>
-        updateTripWith(tripId, (trip) => tripHelpers.removeChecklistItem(trip, itemId)),
+      deleteChecklistItem: (tripId, itemId) => {
+        const trip = stateRef.current.trips.find((t) => t.id === tripId);
+        const index = trip?.checklist.findIndex((i) => i.id === itemId) ?? -1;
+        const item = index >= 0 ? trip!.checklist[index] : undefined;
+        updateTripWith(tripId, (t) => tripHelpers.removeChecklistItem(t, itemId));
+        if (!item) return NOOP_UNDO;
+        return { undo: () => updateTripWith(tripId, (t) => tripHelpers.insertChecklistItemAt(t, item, index)) };
+      },
       clearCompletedChecklist: (tripId) =>
         updateTripWith(tripId, (trip) => tripHelpers.clearCompletedChecklist(trip)),
 
@@ -372,7 +406,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return expense;
       },
       updateExpense: (id, patch) => dispatch({ type: 'UPDATE_EXPENSE', id, patch }),
-      deleteExpense: (id) => dispatch({ type: 'DELETE_EXPENSE', id }),
+      deleteExpense: (id) => {
+        const expense = stateRef.current.expenses.find((e) => e.id === id);
+        dispatch({ type: 'DELETE_EXPENSE', id });
+        if (!expense) return NOOP_UNDO;
+        return { undo: () => dispatch({ type: 'ADD_EXPENSE', expense }) };
+      },
       linkExpenseToActivity: (expenseId, activityId) =>
         dispatch({ type: 'UPDATE_EXPENSE', id: expenseId, patch: { activityId } }),
 
@@ -405,7 +444,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: 'ADD_SETTLEMENT', settlement });
         return settlement;
       },
-      deleteSettlement: (id) => dispatch({ type: 'DELETE_SETTLEMENT', id }),
+      deleteSettlement: (id) => {
+        const settlement = stateRef.current.settlements.find((s) => s.id === id);
+        dispatch({ type: 'DELETE_SETTLEMENT', id });
+        if (!settlement) return NOOP_UNDO;
+        return { undo: () => dispatch({ type: 'ADD_SETTLEMENT', settlement }) };
+      },
 
       resetToSampleData: () => {
         if (syncRef.current) {
