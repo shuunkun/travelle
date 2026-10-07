@@ -1,11 +1,14 @@
 'use client'
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   BedDouble,
+  Check,
   ChevronDown,
   ChevronUp,
   Clock,
+  Copy,
+  ExternalLink,
   Link2,
   MapPin,
   Pencil,
@@ -52,13 +55,64 @@ export interface ActivityCardProps {
 
 const shortDate = (date: string) => formatDate(date, { month: 'short', day: 'numeric' });
 
-function Detail({ label, value }: { label: string; value?: string }) {
+const mapsUrl = (query: string) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+const flightStatusUrl = (flightNumber: string) => `https://www.google.com/search?q=${encodeURIComponent(`${flightNumber} flight`)}`;
+
+/** Small label/value chip. With `copy`, tapping copies the value (booking refs, seats). */
+function Detail({ label, value, copy = false }: { label: string; value?: string; copy?: boolean }) {
+  const [copied, setCopied] = useState(false);
   if (!value) return null;
-  return (
-    <span className="inline-flex items-center gap-1 rounded-md bg-gray-50 px-2 py-0.5 text-xs text-gray-600">
+  const chip = (
+    <>
       <span className="text-gray-400">{label}</span>
       <span className="font-medium text-gray-700">{value}</span>
-    </span>
+    </>
+  );
+  if (!copy || typeof navigator === 'undefined' || !navigator.clipboard) {
+    return <span className="inline-flex items-center gap-1 rounded-md bg-gray-50 px-2 py-0.5 text-xs text-gray-600">{chip}</span>;
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void navigator.clipboard.writeText(value).then(() => {
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 1500);
+        });
+      }}
+      className="inline-flex items-center gap-1 rounded-md bg-gray-50 px-2 py-0.5 text-xs text-gray-600 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7C9A82]"
+      title={`Copy ${label.toLowerCase()}`}
+      aria-label={`Copy ${label.toLowerCase()} ${value}`}
+    >
+      {copied ? (
+        <>
+          <Check className="w-3 h-3 text-[#5A7A60]" aria-hidden="true" />
+          <span className="font-medium text-[#5A7A60]">Copied</span>
+        </>
+      ) : (
+        <>
+          {chip}
+          <Copy className="w-3 h-3 text-gray-400" aria-hidden="true" />
+        </>
+      )}
+    </button>
+  );
+}
+
+/** Opens a place in Google Maps. */
+function MapLink({ query, children, className = '' }: { query: string; children: React.ReactNode; className?: string }) {
+  return (
+    <a
+      href={mapsUrl(query)}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`inline-flex items-start gap-1 text-sm text-gray-500 underline decoration-gray-300 underline-offset-2 hover:text-[#5A7A60] hover:decoration-[#7C9A82] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7C9A82] rounded ${className}`}
+      title="Open in Google Maps"
+    >
+      <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0" aria-hidden="true" />
+      <span className="break-words">{children}</span>
+      <ExternalLink className="w-3 h-3 mt-1 shrink-0 text-gray-300" aria-hidden="true" />
+    </a>
   );
 }
 
@@ -111,7 +165,20 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
       return (
         <div className="flex items-center text-xs font-medium text-blue-600 mb-1">
           <Plane className="w-3 h-3 mr-1" aria-hidden="true" />
-          {[d.airline, d.flightNumber].filter(Boolean).join(' · ') || 'Flight'}
+          {d.flightNumber ? (
+            <a
+              href={flightStatusUrl(d.flightNumber)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 rounded"
+              title="Check flight status"
+            >
+              {[d.airline, d.flightNumber].filter(Boolean).join(' · ')}
+              <ExternalLink className="w-3 h-3 text-blue-300" aria-hidden="true" />
+            </a>
+          ) : (
+            d.airline || 'Flight'
+          )}
         </div>
       );
     }
@@ -165,8 +232,8 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
             </div>
           </div>
           <div className="flex flex-wrap gap-1.5">
-            <Detail label="Ref" value={d.bookingReference} />
-            <Detail label="Seat" value={d.seat} />
+            <Detail label="Ref" value={d.bookingReference} copy />
+            <Detail label="Seat" value={d.seat} copy />
             <Detail label="Terminal" value={d.terminal} />
             <Detail label="Gate" value={d.gate} />
           </div>
@@ -189,24 +256,33 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
               <p className="text-xs text-gray-500">{formatTime12(hotelCheckOutTime(d))}</p>
             </div>
           </div>
-          {d.address && (
-            <div className="text-sm text-gray-500 flex items-start">
-              <MapPin className="w-3.5 h-3.5 mr-1 mt-0.5 shrink-0" aria-hidden="true" />
-              <span className="break-words">{d.address}</span>
-            </div>
-          )}
+          <MapLink query={d.address ? `${d.hotelName} ${d.address}` : d.hotelName || activity.title}>
+            {d.address || 'Open in Maps'}
+          </MapLink>
           <div className="flex flex-wrap gap-1.5">
-            <Detail label="Ref" value={d.bookingReference} />
+            <Detail label="Ref" value={d.bookingReference} copy />
           </div>
         </div>
       );
     }
-    return activity.location ? (
-      <div className="text-sm text-gray-500 flex items-start mt-1.5">
-        <MapPin className="w-3.5 h-3.5 mr-1 mt-0.5 shrink-0" aria-hidden="true" />
-        <span className="break-words">{activity.location}</span>
-      </div>
-    ) : null;
+    if (activity.location) {
+      return (
+        <div className="mt-1.5">
+          <MapLink query={activity.location}>{activity.location}</MapLink>
+        </div>
+      );
+    }
+    // Places and restaurants are worth a map search by name; transport lines aren't.
+    if (activity.category === 'activity' || activity.category === 'food') {
+      return (
+        <div className="mt-1.5">
+          <MapLink query={activity.title} className="text-xs text-gray-400">
+            Find on map
+          </MapLink>
+        </div>
+      );
+    }
+    return null;
   };
 
   const activate = unlessInteractive(onEdit);
