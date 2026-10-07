@@ -12,6 +12,9 @@ import { PageSkeleton } from '@/components/ui/Skeleton'
 import { compareDateKeys, formatCurrency, formatSignedCurrency, getTripStatus, todayKey, pluralize } from '@/lib/utils'
 import { getOverallNetForMe, getTripExpenses, getTripFinancials, getTripSpent, ME_ID } from '@/lib/selectors'
 
+const STAT_CARD = 'p-3 md:p-6 flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-4 h-full'
+const STAT_ICON = 'w-9 h-9 md:w-12 md:h-12 rounded-full flex items-center justify-center shrink-0'
+
 export default function Dashboard() {
   const app = useApp()
   const { hydrated, trips, expenses, friends, settlements } = app
@@ -75,26 +78,26 @@ export default function Dashboard() {
       </div>
 
       {/* Quick stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-12">
+      <div className="grid grid-cols-3 gap-3 md:gap-4 mb-12">
         <Link href="/trips" className="block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7C9A82]">
-          <Card className="p-6 flex items-center gap-4 h-full" interactive>
-            <div className="w-12 h-12 rounded-full bg-[#E8F0EA] flex items-center justify-center text-[#5A7A60] shrink-0">
-              <MapPin className="w-6 h-6" aria-hidden="true" />
+          <Card className={STAT_CARD} interactive>
+            <div className={`${STAT_ICON} bg-[#E8F0EA] text-[#5A7A60]`}>
+              <MapPin className="w-5 h-5 md:w-6 md:h-6" aria-hidden="true" />
             </div>
-            <div>
-              <p className="text-sm text-gray-500">Total trips</p>
-              <p className="text-2xl font-semibold text-gray-900">{trips.length}</p>
+            <div className="min-w-0">
+              <p className="text-xs md:text-sm text-gray-500">Total trips</p>
+              <p className="text-xl md:text-2xl font-semibold text-gray-900">{trips.length}</p>
             </div>
           </Card>
         </Link>
         <Link href="/trips" className="block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7C9A82]">
-          <Card className="p-6 flex items-center gap-4 h-full" interactive>
-            <div className="w-12 h-12 rounded-full bg-[#F5F0E8] flex items-center justify-center text-[#a8946a] shrink-0">
-              <Calendar className="w-6 h-6" aria-hidden="true" />
+          <Card className={STAT_CARD} interactive>
+            <div className={`${STAT_ICON} bg-[#F5F0E8] text-[#a8946a]`}>
+              <Calendar className="w-5 h-5 md:w-6 md:h-6" aria-hidden="true" />
             </div>
-            <div>
-              <p className="text-sm text-gray-500">Upcoming</p>
-              <p className="text-2xl font-semibold text-gray-900">{upcoming.length}</p>
+            <div className="min-w-0">
+              <p className="text-xs md:text-sm text-gray-500">Upcoming</p>
+              <p className="text-xl md:text-2xl font-semibold text-gray-900">{upcoming.length}</p>
             </div>
           </Card>
         </Link>
@@ -102,14 +105,14 @@ export default function Dashboard() {
           href={unsettledTrips[0] ? `/trips/${unsettledTrips[0].trip.id}` : '/trips'}
           className="block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7C9A82]"
         >
-          <Card className="p-6 flex items-center gap-4 h-full" interactive>
-            <div className="w-12 h-12 rounded-full bg-[#E0F0EF] flex items-center justify-center text-[#6BA3A0] shrink-0">
-              <Wallet className="w-6 h-6" aria-hidden="true" />
+          <Card className={STAT_CARD} interactive>
+            <div className={`${STAT_ICON} bg-[#E0F0EF] text-[#6BA3A0]`}>
+              <Wallet className="w-5 h-5 md:w-6 md:h-6" aria-hidden="true" />
             </div>
-            <div>
-              <p className="text-sm text-gray-500">{outstanding > 0.004 ? "You're owed" : outstanding < -0.004 ? 'You owe' : 'Balance'}</p>
-              <p className={`text-2xl font-semibold ${outstanding > 0.004 ? 'text-[#6BA3A0]' : outstanding < -0.004 ? 'text-[#C47C7C]' : 'text-gray-900'}`}>
-                {Math.abs(outstanding) < 0.005 ? 'Settled up' : formatSignedCurrency(outstanding)}
+            <div className="min-w-0">
+              <p className="text-xs md:text-sm text-gray-500 truncate">{outstanding > 0.004 ? "You're owed" : outstanding < -0.004 ? 'You owe' : 'Balance'}</p>
+              <p className={`text-xl md:text-2xl font-semibold tabular-nums truncate ${outstanding > 0.004 ? 'text-[#6BA3A0]' : outstanding < -0.004 ? 'text-[#C47C7C]' : 'text-gray-900'}`}>
+                {Math.abs(outstanding) < 0.005 ? 'Settled' : formatSignedCurrency(outstanding)}
               </p>
             </div>
           </Card>

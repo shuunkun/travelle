@@ -215,7 +215,7 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row sm:items-end gap-3 justify-between">
         <div className="flex flex-wrap items-end gap-3">
-          <div className="w-44">
+          <div className="flex-1 min-w-[9.5rem] sm:flex-none sm:w-44">
             <Select
               label="Category"
               value={categoryFilter}
@@ -223,7 +223,7 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({
               options={[{ value: 'all', label: 'All categories' }, ...EXPENSE_CATEGORIES]}
             />
           </div>
-          <div className="w-44">
+          <div className="flex-1 min-w-[9.5rem] sm:flex-none sm:w-44">
             <Select
               label="Person"
               value={personFilter}
@@ -232,7 +232,7 @@ const ExpensesTab: React.FC<ExpensesTabProps> = ({
             />
           </div>
           {(hasAnyLinks || linkFilter !== 'all') && (
-            <div className="w-44">
+            <div className="flex-1 min-w-[9.5rem] sm:flex-none sm:w-44">
               <Select
                 label="Activity link"
                 value={linkFilter}

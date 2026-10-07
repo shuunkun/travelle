@@ -34,6 +34,15 @@ body {
   background: #fafafa;
 }
 
+/* Scrollable rows that shouldn't show a bar (tab strips, chip rows). */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

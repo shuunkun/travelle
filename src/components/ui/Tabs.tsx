@@ -38,7 +38,7 @@ function Tabs<T extends string>({ tabs, value, onChange, className = '', ...rest
       role="tablist"
       aria-label={rest['aria-label']}
       onKeyDown={handleKeyDown}
-      className={`flex gap-6 sm:gap-8 border-b border-gray-100 overflow-x-auto ${className}`}
+      className={`flex gap-5 sm:gap-8 border-b border-gray-100 overflow-x-auto no-scrollbar ${className}`}
     >
       {tabs.map((tab) => {
         const selected = tab.value === value;

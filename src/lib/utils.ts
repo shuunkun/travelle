@@ -266,6 +266,15 @@ export const COVER_PRESETS: { name: string; value: string }[] = [
   { name: 'Rose', value: 'linear-gradient(135deg, #C47C7C 0%, #F5E0E0 100%)' },
 ];
 
+/** A preset cover chosen from the destination, so trips created without picking one still look distinct. */
+export function coverForDestination(destination: string): string {
+  const key = destination.trim().toLowerCase();
+  if (!key) return DEFAULT_COVER;
+  let hash = 0;
+  for (let i = 0; i < key.length; i += 1) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  return COVER_PRESETS[hash % COVER_PRESETS.length].value;
+}
+
 export function isImageUrl(value: string): boolean {
   return /^(https?:)?\/\//i.test(value) || value.startsWith('data:') || value.startsWith('/');
 }

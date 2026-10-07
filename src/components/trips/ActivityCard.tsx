@@ -220,20 +220,20 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
       title="Click to edit"
       onClick={activate}
       onKeyDown={activate}
-      className={`flex-1 min-w-0 bg-white p-4 rounded-xl border shadow-sm group outline-none cursor-pointer hover:shadow-md hover:border-gray-200 focus-visible:ring-2 focus-visible:ring-[#7C9A82] focus-visible:ring-offset-2 transition-[box-shadow,border-color] duration-200 ${
+      className={`flex-1 min-w-0 bg-white p-3.5 sm:p-4 rounded-xl border shadow-sm group outline-none cursor-pointer hover:shadow-md hover:border-gray-200 focus-visible:ring-2 focus-visible:ring-[#7C9A82] focus-visible:ring-offset-2 transition-[box-shadow,border-color] duration-200 ${
         highlighted ? 'border-[#7C9A82] ring-2 ring-[#7C9A82]/50 ring-offset-2' : 'border-gray-100'
       }`}
     >
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           {renderHeaderLine()}
           <h4 className="text-base font-medium text-gray-900 break-words">{activity.title}</h4>
         </div>
         <div className="flex items-center gap-0.5 shrink-0 opacity-60 sm:opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" disabled={index === 0} onClick={() => onMove(-1)} aria-label={`Move ${activity.title} up`}>
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 max-sm:hidden" disabled={index === 0} onClick={() => onMove(-1)} aria-label={`Move ${activity.title} up`}>
             <ChevronUp size={15} aria-hidden="true" />
           </Button>
-          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" disabled={index === count - 1} onClick={() => onMove(1)} aria-label={`Move ${activity.title} down`}>
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 max-sm:hidden" disabled={index === count - 1} onClick={() => onMove(1)} aria-label={`Move ${activity.title} down`}>
             <ChevronDown size={15} aria-hidden="true" />
           </Button>
           <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onEdit} aria-label={`Edit ${activity.title}`}>

@@ -12,9 +12,9 @@ import { ParsedItem, ParsedTripText, parseTripText, resolveItemDate } from '@/li
 import * as tripHelpers from '@/lib/trip-helpers';
 import { flightArrivalDayOffset, formatTime12, hotelNights } from '@/lib/activities';
 import {
-  DEFAULT_COVER,
   PRESET_COLORS,
   compareDateKeys,
+  coverForDestination,
   formatCurrency,
   formatDate,
   generateId,
@@ -174,7 +174,7 @@ export function SmartImport(props: Props) {
       destination: fields.destination.trim(),
       startDate,
       endDate,
-      coverImage: DEFAULT_COVER,
+      coverImage: coverForDestination(fields.destination),
       description: notesText,
       travelers,
       budget: Number.isFinite(budget) && budget > 0 ? budget : 0,
