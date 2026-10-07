@@ -1,12 +1,13 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { Cloud, CloudOff, LogOut, RefreshCw, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Cloud, CloudOff, KeyRound, LogOut, RefreshCw, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useApp, useCloud } from '@/components/providers/AppProvider';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
-import { SignInForm } from '@/components/cloud/SignInForm';
+import { SetPasswordForm, SignInForm } from '@/components/cloud/SignInForm';
 import { ImportDeviceTrips } from '@/components/cloud/ImportDeviceTrips';
 import { ME_ID } from '@/lib/selectors';
 import { pluralize } from '@/lib/utils';
@@ -18,6 +19,39 @@ const STATUS_COPY = {
   synced: { icon: CheckCircle2, text: 'All changes synced', tone: 'text-[#5A7A60]' },
   error: { icon: AlertTriangle, text: 'Sync problem, retrying', tone: 'text-[#C47C7C]' },
 } as const;
+
+/** Set or change the password used to sign in on other devices. */
+function PasswordCard() {
+  const [open, setOpen] = useState(false);
+  const [saved, setSaved] = useState(false);
+  return (
+    <Card className="space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="font-medium text-gray-900 flex items-center gap-2">
+            <KeyRound className="w-4 h-4 text-[#7C9A82]" aria-hidden="true" /> Password
+          </h2>
+          <p className="text-sm text-gray-500">
+            {saved ? 'Password saved. Use it with your email to sign in elsewhere.' : 'The password you use to sign in on other devices.'}
+          </p>
+        </div>
+        {!open && (
+          <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+            {saved ? 'Change' : 'Set password'}
+          </Button>
+        )}
+      </div>
+      {open && (
+        <SetPasswordForm
+          onDone={() => {
+            setOpen(false);
+            setSaved(true);
+          }}
+        />
+      )}
+    </Card>
+  );
+}
 
 export default function AccountPage() {
   const cloud = useCloud();
@@ -39,6 +73,15 @@ export default function AccountPage() {
         </Card>
       ) : cloud.user ? (
         <>
+          {cloud.passwordRecovery && (
+            <Card className="space-y-3 border-[#7C9A82]">
+              <div>
+                <h2 className="font-medium text-gray-900">Choose a new password</h2>
+                <p className="text-sm text-gray-500">You followed a reset link, so you&apos;re signed in. Set a password to use next time.</p>
+              </div>
+              <SetPasswordForm />
+            </Card>
+          )}
           <Card className="space-y-4">
             <div className="flex items-center gap-3">
               {me && <Avatar name={me.name} color={me.color} />}
@@ -67,6 +110,7 @@ export default function AccountPage() {
               </Button>
             </div>
           </Card>
+          {!cloud.passwordRecovery && <PasswordCard />}
           <ImportDeviceTrips />
           <p className="text-sm text-gray-500">
             To plan with friends, open a trip and use <strong>Share</strong>. Anyone with the link can sign in and join.

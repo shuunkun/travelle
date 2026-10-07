@@ -184,8 +184,16 @@ export interface CloudContextValue {
   user: UserIdentity | null;
   status: CloudStatus;
   error?: string;
-  sendMagicLink: (email: string, redirectPath?: string) => Promise<{ error?: string }>;
-  verifyCode: (email: string, code: string) => Promise<{ error?: string }>;
+  signIn: (email: string, password: string) => Promise<{ error?: string }>;
+  /**
+   * Creates the account and signs in. `needsConfirmation` means Supabase is
+   * still set to confirm emails, so no session was issued.
+   */
+  signUp: (email: string, password: string) => Promise<{ error?: string; needsConfirmation?: boolean }>;
+  sendPasswordReset: (email: string, redirectPath?: string) => Promise<{ error?: string }>;
+  updatePassword: (password: string) => Promise<{ error?: string }>;
+  /** True after arriving from a password-reset link, until a new password is saved. */
+  passwordRecovery: boolean;
   signOut: () => Promise<void>;
   /** Sharing info for a cloud trip (undefined in local mode or before it's saved). */
   tripAccess: (tripId: string) => TripAccess | undefined;
@@ -208,6 +216,21 @@ function errorText(error: unknown): string {
   return 'Something went wrong';
 }
 
+const NOT_CONFIGURED = 'Cloud sync is not set up for this site yet.';
+
+/** Supabase auth errors in plain words. */
+function friendlyAuthError(message: string): string {
+  const m = message.toLowerCase();
+  if (m.includes('invalid login credentials')) return 'Wrong email or password.';
+  if (m.includes('already registered') || m.includes('already been registered')) return 'There is already an account with this email. Sign in instead.';
+  if (m.includes('password should be')) return 'Use a password of at least 6 characters.';
+  if (m.includes('not authorized') || m.includes('rate limit') || m.includes('over_email_send_rate_limit')) {
+    return "We couldn't send that email. If you've forgotten your password, create a new account and rejoin your trips from their invite links.";
+  }
+  if (m.includes('email not confirmed')) return 'This account still needs its email confirmed.';
+  return message;
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, EMPTY);
   // Latest state for imperative reads inside actions (kept in an effect so we
@@ -220,6 +243,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const supabase = getSupabase();
   const [authReady, setAuthReady] = useState(!isCloudConfigured);
   const [user, setUser] = useState<UserIdentity | null>(null);
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [syncStatus, setSyncStatus] = useState<{ status: SyncStatus; error?: string }>({ status: 'loading' });
   const [access, setAccess] = useState<Map<string, TripAccess>>(() => new Map());
   const [deviceTrips, setDeviceTrips] = useState<Trip[]>([]);
@@ -238,7 +262,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setAuthReady(true);
     };
     void supabase.auth.getSession().then(({ data }) => apply(data.session));
-    const { data } = supabase.auth.onAuthStateChange((_event, session) => apply(session));
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') setPasswordRecovery(true);
+      if (event === 'SIGNED_OUT') setPasswordRecovery(false);
+      apply(session);
+    });
     return () => data.subscription.unsubscribe();
   }, [supabase]);
 
@@ -401,19 +429,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       user,
       status,
       error: userId ? syncStatus.error : undefined,
-      sendMagicLink: async (email, redirectPath = '/account') => {
-        if (!supabase) return { error: 'Cloud sync is not set up for this site yet.' };
-        const { error } = await supabase.auth.signInWithOtp({
-          email: email.trim(),
-          options: { emailRedirectTo: `${window.location.origin}${redirectPath}` },
+      signIn: async (email, password) => {
+        if (!supabase) return { error: NOT_CONFIGURED };
+        const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+        return error ? { error: friendlyAuthError(error.message) } : {};
+      },
+      signUp: async (email, password) => {
+        if (!supabase) return { error: NOT_CONFIGURED };
+        const { data, error } = await supabase.auth.signUp({ email: email.trim(), password });
+        if (error) return { error: friendlyAuthError(error.message) };
+        // With "Confirm email" off, Supabase returns a session straight away.
+        if (!data.session) return { needsConfirmation: true };
+        return {};
+      },
+      sendPasswordReset: async (email, redirectPath = '/account') => {
+        if (!supabase) return { error: NOT_CONFIGURED };
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+          redirectTo: `${window.location.origin}${redirectPath}`,
         });
-        return error ? { error: error.message } : {};
+        return error ? { error: friendlyAuthError(error.message) } : {};
       },
-      verifyCode: async (email, code) => {
-        if (!supabase) return { error: 'Cloud sync is not set up for this site yet.' };
-        const { error } = await supabase.auth.verifyOtp({ email: email.trim(), token: code.trim(), type: 'email' });
-        return error ? { error: error.message } : {};
+      updatePassword: async (password) => {
+        if (!supabase) return { error: NOT_CONFIGURED };
+        const { error } = await supabase.auth.updateUser({ password });
+        if (error) return { error: friendlyAuthError(error.message) };
+        setPasswordRecovery(false);
+        return {};
       },
+      passwordRecovery,
       signOut: async () => {
         await supabase?.auth.signOut();
       },
@@ -466,7 +509,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setDeviceTrips(deviceTripsToImport());
       },
     };
-  }, [supabase, authReady, user, userId, userEmail, syncStatus, access, deviceTrips]);
+  }, [supabase, authReady, user, userId, userEmail, syncStatus, access, deviceTrips, passwordRecovery]);
 
   const value = useMemo<AppContextValue>(
     () => ({
